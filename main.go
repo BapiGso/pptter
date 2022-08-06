@@ -37,5 +37,5 @@ func main() {
 	router.POST("/", Loginpost)
 	router.GET("/ws", handleConnections)
 	go handleMessages()
-	go log.Fatal(http.ListenAndServe(":"+port, router))
+	go log.Fatal(http.ListenAndServeTLS(":"+port, "crt.crt", "key.key", router))
 }
