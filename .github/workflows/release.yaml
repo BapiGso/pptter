@@ -2,6 +2,7 @@
 
 on:
   push: # 每次 push 的时候触发
+  workflow_dispatch:
 
 name: Build Release
 jobs:
