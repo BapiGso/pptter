@@ -13,8 +13,8 @@ demo：[demo](https://pptter.onrender.com/)
 
 ## 如果您是开发者
 
- - 使用[httprouter](github.com/julienschmidt/httprouter)分发路由
- - 使用[sessions](github.com/gorilla/sessions)设置cookie
+ - 使用[httprouter](https://github.com/julienschmidt/httprouter)分发路由
+ - 使用[sessions](https://github.com/gorilla/sessions)设置cookie
  - 使用text/template解析html模板
  - 使用map键值对存储数据，无需数据库
  - 使用WebSocket协议通讯
