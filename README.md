@@ -5,7 +5,7 @@
 ## 预览及demo
 
 ![预览](https://github.com/BapiGso/pptter/blob/main/assets/QQ%E6%88%AA%E5%9B%BE20220806143241.webp)
-demo：(demo)[https://pptter.onrender.com/]
+demo：[demo](https://pptter.onrender.com/)
 
 ## 如果您是使用者
 
@@ -19,7 +19,7 @@ demo：(demo)[https://pptter.onrender.com/]
  - 使用map键值对存储数据，无需数据库
  - 使用WebSocket协议通讯
  - 使用embed打包静态文件
- - 前端来自于(fiora)[https://github.com/yinxin630/fiora]
+ - 前端来自于[fiora](https://github.com/yinxin630/fiora)
 
 ## Authors 关于作者
 
