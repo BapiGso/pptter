@@ -5,7 +5,7 @@
 ## 预览及demo
 
 ![预览](https://github.com/BapiGso/pptter/blob/main/assets/QQ%E6%88%AA%E5%9B%BE20220806143241.webp)
-(demo)[https://pptter.onrender.com/]
+demo：(demo)[https://pptter.onrender.com/]
 
 ## 如果您是使用者
 
