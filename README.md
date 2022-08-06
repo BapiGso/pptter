@@ -5,7 +5,7 @@
 ## 预览及demo
 
 ![预览](https://github.com/BapiGso/pptter/blob/main/assets/QQ%E6%88%AA%E5%9B%BE20220806143241.webp)
-demo：[demo](https://pptter.onrender.com/)
+[demo](https://pptter.onrender.com/)
 
 ## 如果您是使用者
 
@@ -21,13 +21,13 @@ demo：[demo](https://pptter.onrender.com/)
  - 使用embed打包静态文件
  - 前端来自于[fiora](https://github.com/yinxin630/fiora)
 
-## Authors 关于作者
+## 关于作者
 
 [smoe](https://smoec.cc)
 
-## License 授权协议
+## License
 
-这个项目 MIT 协议， 请点击 [LICENSE.md](LICENSE.md) 了解更多细节。
+这个项目 MIT 协议， 请点击 [LICENSE](LICENSE) 了解更多细节。
 
 ## 名字由来？
 
