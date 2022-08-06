@@ -17,7 +17,7 @@ jobs:
       - run: go build -o pptter_linux_amd64 # 这 3 条是交叉编译 Go 的指令，酌情修改。
       - run: CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o pptter_windows_amd64.exe
       - run: CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o pptter_mac_amd64
-      - run: CGO_ENABLED=0 GOOS=linux GOARCH=arm go build -o pptter_mac_arm
+      - run: CGO_ENABLED=0 GOOS=linux GOARCH=arm go build -o pptter_linux_arm
       - run: CGO_ENABLED=0 GOOS=windows GOARCH=arm go build -o pptter_windows_arm.exe
       #- run: CGO_ENABLED=0 GOOS=darwin GOARCH=arm go build -o pptter_mac_arm
       - run: zip pptter-windows-amd64.zip pptter_windows_amd64.exe key.key crt.crt
