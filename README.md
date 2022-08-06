@@ -23,7 +23,7 @@
 
 ## 关于作者
 
-[smoe](https://smoec.cc)
+[smoe](https://smoe.cc)
 
 ## License
 
