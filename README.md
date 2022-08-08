@@ -9,7 +9,11 @@
 
 ## 如果您是使用者
 
-请到[releases](https://github.com/BapiGso/pptter/releases)界面下载对应平台的二进制文件运行即可
+请到[releases](https://github.com/BapiGso/pptter/releases)界面下载对应平台的二进制文件
+运行
+``
+  ./pptter -p 端口号 -n 聊天室名
+``
 
 ## 如果您是开发者
 
@@ -31,4 +35,4 @@
 
 ## 名字由来？
 
-可能来源于青椒苦瓜汤的英译组合
+可能来源于苦瓜青椒汤的英译组合
