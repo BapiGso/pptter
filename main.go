@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	_ "embed"
+	"flag"
 	"fmt"
 	"github.com/julienschmidt/httprouter"
 	"log"
@@ -15,11 +16,10 @@ var assets embed.FS
 var port, roomname string
 
 func welcome() {
-	fmt.Print("请输入运行端口:")
-	fmt.Scanln(&port)
-	fmt.Print("请输入聊天室名称:")
-	fmt.Scanln(&roomname)
-	go fmt.Println("Starting server at port " + port)
+	flag.StringVar(&port, "p", "8443", "运行端口，默认8443")
+	flag.StringVar(&roomname, "n", "PPTTER", "聊天室名，默认PPTTER")
+	flag.Parse()
+	go fmt.Printf("Starting server at https://localhost:%v\n ", port)
 	go fmt.Scan()
 	//data, _ := assets.ReadFile("assets/key.key")
 	//fmt.Println(string(data))
