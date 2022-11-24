@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>PPTTER</title>
+    <link href="/assets/pptter.json" rel="manifest">
+    <!--    <link rel="stylesheet" href="https://cdn.staticfile.org/font-awesome/4.7.0/css/font-awesome.css">-->
+    <style>
+        html {
+            height: 100%;
+        }
+
+        body {
+            height: 100%;
+            display: grid;
+            margin: auto;
+            grid-template-columns: repeat(20, 1fr);
+            grid-template-rows: repeat(20, 1fr);
+            background: url(/assets/img.png) round;
+        }
+
+        /*.div1 {*/
+        /*    grid-area: 3 / 4 / 19 / 18;*/
+        /*    background-color: #0dcaf0;*/
+
+        /*}*/
+        .group {
+            grid-area: 3 / 4 / 19 / 5;
+            background-color: rgb(5 159 149 / 80%);
+            border-top-left-radius: 10px;
+            border-bottom-left-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .group .list {
+            flex-grow: 8;
+        }
+
+        .group .info {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .group .info svg {
+            flex-grow: 1;
+        }
+
+        .online {
+            grid-area: 3 / 5 / 4 / 18;
+            background-color: rgba(241, 241, 241, 0.6);
+            border-top-right-radius: 10px;
+            backdrop-filter: blur(6px);
+            border-bottom: 1px solid rgba(208, 208, 208, 0.6);
+            display: flex;
+            align-items: center;
+        }
+
+        .online h3 {
+            margin: 10px;
+            flex-grow: 20;
+        }
+
+        .online svg {
+            flex-grow: 1;
+        }
+
+        .tele {
+            overflow-y: auto;
+            grid-area: 4 / 5 / 18 / 18;
+            background-color: rgba(241, 241, 241, 0.6);
+            backdrop-filter: blur(6px);
+        }
+
+        .inputarea {
+            display: flex;
+            align-items: center;
+            grid-area: 18 / 5 / 19 / 18;
+            background-color: rgb(255 255 255 / 80%);
+            border-bottom-right-radius: 10px;
+            backdrop-filter: blur(6px);
+        }
+
+        .inputarea form {
+            flex-grow: 20;
+        }
+
+        .inputarea form input {
+            width: 95%;
+            padding: 0 8px;
+            height: 32px;
+            line-height: 32px;
+            outline: none;
+            border: 1px solid rgba(208, 208, 208, 0.5);
+            font-size: 14px;
+            color: #666;
+            -webkit-user-select: auto;
+            -moz-user-select: auto;
+            -ms-user-select: auto;
+            user-select: auto;
+        }
+
+        .inputarea svg {
+            flex-grow: 1;
+        }
+
+        .message-obj{
+            display: grid;
+            grid-template-areas:
+        "avatar name     time"
+        "avatar content  content"
+        ".      content  content";
+            grid-template-columns: 50px 50px 1fr;
+            grid-template-rows: 20px 1fr 1fr;
+            margin: 20px;
+        }
+
+        .message-self{
+            grid-template-areas:
+        "time    name     avatar"
+        "content content  avatar"
+        "content content  .";
+            justify-items: end;
+            grid-template-columns: 1fr 50px 50px;
+        }
+        .message-obj img{
+            grid-area: avatar;
+        }
+
+        .message-obj .name{
+            grid-area: name;
+            color: #333;
+            font-size: 13px;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+            user-select: text;
+            margin-right: 4px;
+        }
+        .message-obj .time{
+            grid-area: time;
+            color: #666;
+            font-size: 10px;
+        }
+
+        .message-content{
+            grid-area: content;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: #555;
+            font-size: 14px;
+            word-break:break-all;
+            width: fit-content;
+            max-width: 50%;
+        }
+        .message-self .message-content{
+            background-color: #0dcaf0;
+        }
+
+    </style>
+</head>
+<body>
+<div class="div1"></div>
+<div class="group">
+    <div class="list"></div>
+    <div class="info">
+        <svg class="icon icon-tabler icon-tabler-brand-github" fill="none" height="30" stroke="#9e9e9e"
+             stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
+             xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
+            <path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5"/>
+        </svg>
+        <svg class="icon icon-tabler icon-tabler-info-circle" fill="none" height="30" stroke="#9e9e9e"
+             stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
+             xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
+            <circle cx="12" cy="12" r="9"/>
+            <line x1="12" x2="12.01" y1="8" y2="8"/>
+            <polyline points="11 12 12 12 12 16 13 16"/>
+        </svg>
+        <svg class="icon icon-tabler icon-tabler-logout" fill="none" height="30" stroke="#9e9e9e"
+             stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
+             xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
+            <path d="M14 8v-2a2 2 0 0 0 -2 -2h-7a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7a2 2 0 0 0 2 -2v-2"/>
+            <path d="M7 12h14l-3 -3m0 6l3 -3"/>
+        </svg>
+    </div>
+</div>
+<div class="online">
+    <h3>HD9990</h3>
+    <svg class="icon icon-tabler icon-tabler-share" fill="none" height="30" stroke="#9e9e9e"
+         stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
+         xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
+        <circle cx="6" cy="12" r="3"/>
+        <circle cx="18" cy="6" r="3"/>
+        <circle cx="18" cy="18" r="3"/>
+        <line x1="8.7" x2="15.3" y1="10.7" y2="7.3"/>
+        <line x1="8.7" x2="15.3" y1="13.3" y2="16.7"/>
+    </svg>
+</div>
+<div class="tele">
+    <div class="message-list">
+        <div class="message-obj ">
+            <img alt="" src="/assets/img/10.jpg"
+                 style="width: 44px; height: 44px; border-radius: 22px;">
+                <span class="name">admin</span>
+                <span class="time">昨天 20:46</span>
+            <div class="message-content">
+                我不会这么高端的机
+            </div>
+
+        </div>
+        <div class="message-obj ">
+            <img alt="" src="/assets/img/10.jpg"
+                 style="width: 44px; height: 44px; border-radius: 22px;">
+
+                <span class="name">admin</span>
+                <span class="time">昨天 20:46</span>
+
+            <div class="message-content">
+                我不会这么高端的机aaaaaaaaaaaaaaaaaaaa我不会这么高端的机aaaaaaaaaaaaaaaaaaaa我不会这么高端的机aaaaaaaaaaaaaaaaaaaa我不会这么高端的机aaaaaaaaaaaaaaaaaaaa我不会这么高端的机aaaaaaaaaaaaaaaaaaaa
+            </div>
+
+        </div>
+        <div class="message-obj message-self">
+            <img alt="" src="/assets/img/10.jpg"
+                 style="width: 44px; height: 44px; border-radius: 22px;">
+
+                <span class="name">admin</span>
+                <span class="time">昨天 20:46</span>
+
+            <div class="message-content">
+                测试自己的评论
+            </div>
+
+        </div>
+    </div>
+</div>
+<div class="inputarea">
+    <svg class="icon icon-tabler icon-tabler-mood-smile" fill="none" height="30" stroke="#9e9e9e"
+         stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
+         xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
+        <circle cx="12" cy="12" r="9"/>
+        <line x1="9" x2="9.01" y1="10" y2="10"/>
+        <line x1="15" x2="15.01" y1="10" y2="10"/>
+        <path d="M9.5 15a3.5 3.5 0 0 0 5 0"/>
+    </svg>
+    <form autocomplete="off" class="form--m6M1I" οnkeydοwn="return false">
+        <input class="input" maxlength="2048" placeholder="随便聊点啥吧, 不要无意义刷屏~~" type="text">
+
+    </form>
+    <svg class="icon icon-tabler icon-tabler-file-upload" fill="none" height="30" stroke="#9e9e9e"
+         stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
+         xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
+        <path d="M14 3v4a1 1 0 0 0 1 1h4"/>
+        <path d="M17 21h-10a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2z"/>
+        <line x1="12" x2="12" y1="11" y2="17"/>
+        <polyline points="9 14 12 11 15 14"/>
+    </svg>
+    <svg class="icon icon-tabler icon-tabler-send" fill="none" height="30" stroke="#9e9e9e"
+         stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
+         xmlns="http://www.w3.org/2000/svg">
+        <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
+        <line x1="10" x2="21" y1="14" y2="3"/>
+        <path d="M21 3l-6.5 18a0.55 .55 0 0 1 -1 0l-3.5 -7l-7 -3.5a0.55 .55 0 0 1 0 -1l18 -6.5"/>
+    </svg>
+</div>
+</body>
+</html>

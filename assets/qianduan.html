@@ -9,7 +9,7 @@
     <meta content="smoe.cc" name="author">
     <meta content="viewport-fit=cover,width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no"
           name="viewport">
-    <link href="embed/assets/favicon-192.jpg" rel="shortcut icon">
+    <link href="/assets/favicon-192.jpg" rel="shortcut icon">
     <meta content="yes" name="apple-mobile-web-app-capable">
     <meta content="black" name="apple-mobile-web-app-status-bar-style">
     <meta content="pptter" name="apple-mobile-web-app-title">
@@ -18,17 +18,17 @@
     <meta content="yes" name="apple-mobile-web-app-capable">
     <meta content="yes" name="apple-touch-fullscreen">
     <input data-inspect-config="3" id="_w_simile" type="hidden">
-    <link href="embed/assets/qianduan.css" rel="stylesheet" type="text/css">
+    <link href="/assets/qianduan.css" rel="stylesheet" type="text/css">
 </head>
 <body>
 <div id="app">
     <div class="app--3Brx7 g1yaz81g"
-         style="background-image: url(embed/assets/background.webp); background-size: 1920px 1080px; background-repeat: no-repeat;">
+         style="background-image: url(/assets/background.webp); background-size: 1920px 1080px; background-repeat: no-repeat;">
         <div class="blur--2lxPV"
-             style="background-position: -384px -46.85px; background-image: url(embed/assets/background.webp); background-size: 1920px 1080px; background-repeat: no-repeat; width: 60%; height: 90%; left: 20%; top: 5%;"></div>
+             style="background-position: -384px -46.85px; background-image: url(/assets/background.webp); background-size: 1920px 1080px; background-repeat: no-repeat; width: 60%; height: 90%; left: 20%; top: 5%;"></div>
         <div class="child--d7f8p" style="width: 60%; height: 90%; left: 20%; top: 5%;">
             <div class="sidebar--3agUD" data-aero="false"><img alt="" class="avatar--2MguP"
-                                                               src="embed/assets/favicon-192.jpg"
+                                                               src="/assets/favicon-192.jpg"
                                                                style="width: 60px; height: 60px; border-radius: 30px;">
                 <div class="onlineStatus--1EWHm status--3MkNG">
                     <div class="status--h0vkT online"></div>
@@ -63,7 +63,7 @@
                 <div class="c8a3pfk">
                     <div class="messageList--3GslJ show-scrollbar">
                         <div class="message--2HA4o "><img alt="" class="avatar--sQ2bN"
-                                                          src="embed/assets/11.jpg"
+                                                          src="/assets/img/11.jpg"
                                                           style="width: 44px; height: 44px; border-radius: 22px;">
                             <div class="right--A6GtN">
                                 <div class="nicknameTimeBlock--Bzuab"><span class="tag--1ttf_"
@@ -79,7 +79,7 @@
                             </div>
                         </div>
                         <div class="message--2HA4o "><img alt="" class="avatar--sQ2bN"
-                                                          src="embed/assets/11.jpg"
+                                                          src="/assets/img/11.jpg"
                                                           style="width: 44px; height: 44px; border-radius: 22px;">
                             <div class="right--A6GtN">
                                 <div class="nicknameTimeBlock--Bzuab"><span class="tag--1ttf_"
@@ -95,7 +95,7 @@
                             </div>
                         </div>
                         <div class="message--2HA4o "><img alt="" class="avatar--sQ2bN"
-                                                          src="embed/assets/11.jpg"
+                                                          src="/assets/img/11.jpg"
                                                           style="width: 44px; height: 44px; border-radius: 22px;">
                             <div class="right--A6GtN">
                                 <div class="nicknameTimeBlock--Bzuab"><span class="tag--1ttf_"
@@ -114,7 +114,7 @@
                         {{ range . }}
                         {{ with . }}
                         <div class="message--2HA4o "><img alt="" class="avatar--sQ2bN"
-                                                          src="embed/assets/{{ .portrait }}"
+                                                          src="/assets/{{ .portrait }}"
                                                           style="width: 44px; height: 44px; border-radius: 22px;">
                             <div class="right--A6GtN">
                                 <div class="nicknameTimeBlock--Bzuab"><span
@@ -258,7 +258,7 @@
         </div>
     </div>
 </div>
-<script src="embed/assets/reconnecting-websocket.min.js" type="text/javascript"></script>
+<script src="/assets/reconnecting-websocket.min.js" type="text/javascript"></script>
 <script>
     // Create WebSocket connection.
     const socket = new ReconnectingWebSocket(((window.location.protocol === "https:") ? "wss://" : "ws://") + window.location.host + "/ws");
@@ -274,7 +274,7 @@
         if (node.parentNode) {
             node.parentNode.removeChild(node);
         }
-        message2HA4oclone.getElementsByClassName('avatar--sQ2bN')[0].src = "embed/assets/" + json["portrait"]
+        message2HA4oclone.getElementsByClassName('avatar--sQ2bN')[0].src = "/assets/" + json["portrait"]
         message2HA4oclone.getElementsByClassName('nickname--PgNfc')[0].innerHTML = json["name"]
         message2HA4oclone.getElementsByClassName('time--x-3HR')[0].innerHTML = json["time"]
         message2HA4oclone.getElementsByClassName('textMessage--3_l_E')[0].innerHTML = json["say"]

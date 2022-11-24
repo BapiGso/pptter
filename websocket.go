@@ -20,7 +20,7 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-//弃用
+// 弃用
 func socketHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	// Upgrade our raw HTTP connection to a websocket based one
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -50,7 +50,7 @@ func socketHandler(w http.ResponseWriter, r *http.Request, ps httprouter.Params)
 	}
 }
 
-func handleConnections(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	ws, err := upgrader.Upgrade(w, r, nil)
 	online++
@@ -78,7 +78,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 	}
 }
 
-//广播发送至页面
+// 广播发送至页面
 func handleMessages() {
 	for {
 		msg := <-broadcast
