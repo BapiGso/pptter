@@ -14,18 +14,19 @@
             height: 100%;
             display: grid;
             margin: auto;
-            grid-template-columns: repeat(20, 1fr);
+            grid-template-columns: repeat(36, 1fr);
             grid-template-rows: repeat(20, 1fr);
             background: url(/assets/img.png) round;
         }
 
-        /*.div1 {*/
-        /*    grid-area: 3 / 4 / 19 / 18;*/
-        /*    background-color: #0dcaf0;*/
+        .shadow {
+            grid-area: 3 / 8 / 19 / 30;
+            border-radius: 10px;
+            box-shadow: 0px 0px 60px rgb(0 0 0 / 50%);
+        }
 
-        /*}*/
-        .group {
-            grid-area: 3 / 4 / 19 / 5;
+        .sidebar {
+            grid-area: 3 / 8 / 19 / 9;
             background-color: rgb(5 159 149 / 80%);
             border-top-left-radius: 10px;
             border-bottom-left-radius: 10px;
@@ -34,23 +35,41 @@
             align-items: center;
         }
 
-        .group .list {
+        .sidebar .list {
             flex-grow: 8;
         }
 
-        .group .info {
+        .sidebar .info {
             flex-grow: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
         }
 
-        .group .info svg {
+        .sidebar .info svg {
             flex-grow: 1;
         }
 
-        .online {
-            grid-area: 3 / 5 / 4 / 18;
+        .groupbar {
+            grid-area: 3 / 9 / 19 / 14;
+            background-color: #0dcaf0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .groupbar .search {
+            flex-grow: 1;
+            background-color: #0c4128;
+        }
+
+        .groupbar .linklist {
+            flex-grow: 15;
+            background-color: #4d5154;
+
+        }
+
+        .topbar {
+            grid-area: 3 / 14 / 4 / 30;
             background-color: rgba(241, 241, 241, 0.6);
             border-top-right-radius: 10px;
             backdrop-filter: blur(6px);
@@ -59,18 +78,18 @@
             align-items: center;
         }
 
-        .online h3 {
+        .topbar h3 {
             margin: 10px;
             flex-grow: 20;
         }
 
-        .online svg {
+        .topbar svg {
             flex-grow: 1;
         }
 
         .tele {
             overflow-y: auto;
-            grid-area: 4 / 5 / 18 / 18;
+            grid-area: 4 / 14 / 18 / 30;
             background-color: rgba(241, 241, 241, 0.6);
             backdrop-filter: blur(6px);
         }
@@ -78,7 +97,7 @@
         .inputarea {
             display: flex;
             align-items: center;
-            grid-area: 18 / 5 / 19 / 18;
+            grid-area: 18 / 14 / 19 / 30;
             background-color: rgb(255 255 255 / 80%);
             border-bottom-right-radius: 10px;
             backdrop-filter: blur(6px);
@@ -107,7 +126,19 @@
             flex-grow: 1;
         }
 
-        .message-obj{
+        ::-webkit-scrollbar {
+            display: block;
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.2);
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .message-obj {
             display: grid;
             grid-template-areas:
         "avatar name     time"
@@ -118,7 +149,8 @@
             margin: 20px;
         }
 
-        .message-self{
+
+        .message-self {
             grid-template-areas:
         "time    name     avatar"
         "content content  avatar"
@@ -126,11 +158,12 @@
             justify-items: end;
             grid-template-columns: 1fr 50px 50px;
         }
-        .message-obj img{
+
+        .message-obj img {
             grid-area: avatar;
         }
 
-        .message-obj .name{
+        .message-obj .name {
             grid-area: name;
             color: #333;
             font-size: 13px;
@@ -140,41 +173,48 @@
             user-select: text;
             margin-right: 4px;
         }
-        .message-obj .time{
+
+        .message-obj .time {
             grid-area: time;
             color: #666;
             font-size: 10px;
         }
 
-        .message-content{
+        .message-content {
             grid-area: content;
             background-color: rgba(255, 255, 255, 0.8);
-            padding: 8px 12px;
+            padding: 6px 8px;
             border-radius: 8px;
             color: #555;
             font-size: 14px;
-            word-break:break-all;
+            word-break: break-all;
             width: fit-content;
+            height: fit-content;
             max-width: 50%;
         }
-        .message-self .message-content{
+        .message-content video,
+        .message-content img{
+            width: 100%;
+        }
+
+        .message-self .message-content {
             background-color: #0dcaf0;
         }
 
     </style>
 </head>
 <body>
-<div class="div1"></div>
-<div class="group">
+<div class="shadow"></div>
+<div class="sidebar">
     <div class="list"></div>
     <div class="info">
-        <svg class="icon icon-tabler icon-tabler-brand-github" fill="none" height="30" stroke="#9e9e9e"
+        <svg class="icon icon-tabler icon-tabler-brand-github" fill="none" height="30" stroke="#ccc"
              stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
              xmlns="http://www.w3.org/2000/svg">
             <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
             <path d="M9 19c-4.3 1.4 -4.3 -2.5 -6 -3m12 5v-3.5c0 -1 .1 -1.4 -.5 -2c2.8 -.3 5.5 -1.4 5.5 -6a4.6 4.6 0 0 0 -1.3 -3.2a4.2 4.2 0 0 0 -.1 -3.2s-1.1 -.3 -3.5 1.3a12.3 12.3 0 0 0 -6.2 0c-2.4 -1.6 -3.5 -1.3 -3.5 -1.3a4.2 4.2 0 0 0 -.1 3.2a4.6 4.6 0 0 0 -1.3 3.2c0 4.6 2.7 5.7 5.5 6c-.6 .6 -.6 1.2 -.5 2v3.5"/>
         </svg>
-        <svg class="icon icon-tabler icon-tabler-info-circle" fill="none" height="30" stroke="#9e9e9e"
+        <svg class="icon icon-tabler icon-tabler-info-circle" fill="none" height="30" stroke="#ccc"
              stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
              xmlns="http://www.w3.org/2000/svg">
             <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
@@ -182,7 +222,7 @@
             <line x1="12" x2="12.01" y1="8" y2="8"/>
             <polyline points="11 12 12 12 12 16 13 16"/>
         </svg>
-        <svg class="icon icon-tabler icon-tabler-logout" fill="none" height="30" stroke="#9e9e9e"
+        <svg class="icon icon-tabler icon-tabler-logout" fill="none" height="30" stroke="#ccc"
              stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
              xmlns="http://www.w3.org/2000/svg">
             <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
@@ -191,9 +231,15 @@
         </svg>
     </div>
 </div>
-<div class="online">
-    <h3>HD9990</h3>
-    <svg class="icon icon-tabler icon-tabler-share" fill="none" height="30" stroke="#9e9e9e"
+<div class="groupbar">
+    <div class="search"></div>
+    <div class="linklist">
+
+    </div>
+</div>
+<div class="topbar">
+    <h3>{{.GroupName}}</h3>
+    <svg class="icon icon-tabler icon-tabler-share" fill="none" height="30" stroke="#059f95"
          stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
          xmlns="http://www.w3.org/2000/svg">
         <path d="M0 0h24v24H0z" fill="none" stroke="none"/>
@@ -209,37 +255,30 @@
         <div class="message-obj ">
             <img alt="" src="/assets/img/10.jpg"
                  style="width: 44px; height: 44px; border-radius: 22px;">
-                <span class="name">admin</span>
-                <span class="time">昨天 20:46</span>
+            <span class="name">Golang</span>
+            <span class="time">昨天 20:46</span>
             <div class="message-content">
                 我不会这么高端的机
             </div>
 
         </div>
+        {{range .Gettmp}}
         <div class="message-obj ">
             <img alt="" src="/assets/img/10.jpg"
                  style="width: 44px; height: 44px; border-radius: 22px;">
-
-                <span class="name">admin</span>
-                <span class="time">昨天 20:46</span>
-
+            <span class="name">{{.Name}}</span>
+            <span class="time">{{.Timestr}}</span>
             <div class="message-content">
-                我不会这么高端的机aaaaaaaaaaaaaaaaaaaa我不会这么高端的机aaaaaaaaaaaaaaaaaaaa我不会这么高端的机aaaaaaaaaaaaaaaaaaaa我不会这么高端的机aaaaaaaaaaaaaaaaaaaa我不会这么高端的机aaaaaaaaaaaaaaaaaaaa
+                {{if eq .Filetypecut "image"}}
+                    <img src="/.tmp/{{.FileName}}">
+                {{else if eq .Filetypecut "video"}}
+                    <video controls="controls" src="/.tmp/{{.FileName}}"></video>
+                {{else}}
+                    {{.Say}}
+                {{end}}
             </div>
-
         </div>
-        <div class="message-obj message-self">
-            <img alt="" src="/assets/img/10.jpg"
-                 style="width: 44px; height: 44px; border-radius: 22px;">
-
-                <span class="name">admin</span>
-                <span class="time">昨天 20:46</span>
-
-            <div class="message-content">
-                测试自己的评论
-            </div>
-
-        </div>
+        {{end}}
     </div>
 </div>
 <div class="inputarea">
@@ -253,8 +292,7 @@
         <path d="M9.5 15a3.5 3.5 0 0 0 5 0"/>
     </svg>
     <form autocomplete="off" class="form--m6M1I" οnkeydοwn="return false">
-        <input class="input" maxlength="2048" placeholder="随便聊点啥吧, 不要无意义刷屏~~" type="text">
-
+        <input class="input" id="inputext" maxlength="2048" placeholder="随便聊点啥吧,支持拖拽或粘贴文件上传" type="text">
     </form>
     <svg class="icon icon-tabler icon-tabler-file-upload" fill="none" height="30" stroke="#9e9e9e"
          stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
@@ -265,6 +303,7 @@
         <line x1="12" x2="12" y1="11" y2="17"/>
         <polyline points="9 14 12 11 15 14"/>
     </svg>
+    <input id="uploadfile" type="file" name="file" style="display: none;">
     <svg class="icon icon-tabler icon-tabler-send" fill="none" height="30" stroke="#9e9e9e"
          stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
          xmlns="http://www.w3.org/2000/svg">
@@ -274,4 +313,131 @@
     </svg>
 </div>
 </body>
+<script src="/assets/js/reconnecting-websocket.min.js" type="text/javascript"></script>
+<script>
+    const socket = new ReconnectingWebSocket(((window.location.protocol === "https:") ? "wss://" : "ws://") + window.location.host + "/ws");
+    const form = document.getElementsByClassName('form--m6M1I')[0];
+    socket.addEventListener('message', function (event) {
+        var json = JSON.parse(event.data)
+        var tmp =document.getElementsByClassName("message-obj")[0].cloneNode(true)
+        tmp.getElementsByClassName("name")[0].innerHTML=json.Name
+        tmp.getElementsByClassName("time")[0].innerHTML=timestampFormat(json.Time)
+        if(json.FileName!==""){
+            if(json.Filetype.startsWith("image")){
+                var x = document.createElement('img')
+                x.setAttribute("src", "/.tmp/"+json.FileName);
+                tmp.getElementsByClassName("message-content")[0].innerHTML=""
+                tmp.getElementsByClassName("message-content")[0].appendChild(x)
+            }
+            if(json.Filetype.startsWith("video")){
+                var x = document.createElement('video')
+                x.setAttribute("controls", "controls");
+                x.setAttribute("src", "/.tmp/"+json.FileName);
+                tmp.getElementsByClassName("message-content")[0].innerHTML=""
+                tmp.getElementsByClassName("message-content")[0].appendChild(x)
+            }
+        }else {
+            tmp.getElementsByClassName("message-content")[0].innerHTML = json.Say
+        }
+        if (json.Name === document.cookie.split('=')[1]) {
+            tmp.className = "message-obj message-self"
+        }
+
+        var undelscr=document.getElementsByClassName("message-list")[0]
+        undelscr.appendChild(tmp)
+    });
+
+    var message = {
+        name: null,
+        say: null,
+    }
+
+    message.send = function () {
+        this.name = document.cookie.split('=')[1]
+        this.time = Date.parse(new Date());
+        this.say = document.getElementById("inputext").value
+        socket.send(JSON.stringify(this));
+        console.log(JSON.stringify(this))
+        document.getElementById("inputext").value=""
+        return false
+    }
+
+    var btn = document.getElementsByClassName("icon")
+    btn[5].addEventListener("click", function () {
+        document.getElementById("uploadfile").click();
+    })
+    btn[6].addEventListener("click", message.send)
+
+    document.body.addEventListener("drop", function (e) {
+            e.preventDefault(); //取消默认浏览器拖拽效果
+            var fileList = e.dataTransfer.files; //获取文件对象
+            //检测是否是拖拽文件到页面的操作
+            if (fileList.length === 0) {
+                return false;
+            }
+            // var filesize = Math.floor((fileList[0].size) / 1024);
+            // if (filesize > 1024) {
+            //     this.style.boxShadow = '';
+            //     alert("上传大小不能超过1M.");
+            //     return false;
+            // }
+            socket.send(fileList[0]);
+            this.style.boxShadow = '';
+        },
+        false);
+    document.body.addEventListener("dragover", function (e) {
+        e.preventDefault()
+        this.style.boxShadow = 'inset 0px 0px 1000px 0px #88a6ff';
+    }, false);
+
+    document.body.addEventListener('paste', function (event) {
+        //console.dir(event.clipboardData.files);// 获取文件
+        socket.send(event.clipboardData.files[0]);
+    })
+
+    form.onsubmit = function (e) {
+        var e = e || window.event;
+        if (e.preventDefault) e.preventDefault();
+        else window.event.returnValue = false;
+        message.send()
+    }
+
+    for (const elem of document.getElementsByClassName("message-obj")) {
+        if (elem.getElementsByClassName('name')[0].innerHTML === document.cookie.split('=')[1]) {
+            elem.className = "message-obj message-self"
+        }
+    }
+
+    function timestampFormat( timestamp ) {
+        function zeroize( num ) {
+            return (String(num).length === 1 ? '0' : '') + num;
+        }
+
+        var curTimestamp = parseInt(new Date().getTime() / 1000); //当前时间戳
+        var timestampDiff = curTimestamp - timestamp; // 参数时间戳与当前时间戳相差秒数
+
+        var curDate = new Date( curTimestamp * 1000 ); // 当前时间日期对象
+        var tmDate = new Date( timestamp * 1000 );  // 参数时间戳转换成的日期对象
+
+        var Y = tmDate.getFullYear(), m = tmDate.getMonth() + 1, d = tmDate.getDate();
+        var H = tmDate.getHours(), i = tmDate.getMinutes(), s = tmDate.getSeconds();
+
+        if ( timestampDiff < 60 ) { // 一分钟以内
+            return "刚刚";
+        } else if( timestampDiff < 3600 ) { // 一小时前之内
+            return Math.floor( timestampDiff / 60 ) + "分钟前";
+        } else if ( curDate.getFullYear() === Y && curDate.getMonth()+1 === m && curDate.getDate() === d ) {
+            return '今天' + zeroize(H) + ':' + zeroize(i);
+        } else {
+            var newDate = new Date( (curTimestamp - 86400) * 1000 ); // 参数中的时间戳加一天转换成的日期对象
+            if ( newDate.getFullYear() === Y && newDate.getMonth()+1 === m && newDate.getDate() === d ) {
+                return '昨天' + zeroize(H) + ':' + zeroize(i);
+            } else if ( curDate.getFullYear() === Y ) {
+                return  zeroize(m) + '月' + zeroize(d) + '日 ' + zeroize(H) + ':' + zeroize(i);
+            } else {
+                return  Y + '年' + zeroize(m) + '月' + zeroize(d) + '日 ' + zeroize(H) + ':' + zeroize(i);
+            }
+        }
+    }
+</script>
 </html>
