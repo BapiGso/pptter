@@ -1,11 +1,9 @@
 package main
 
 import (
-	"crypto/tls"
 	"embed"
 	_ "embed"
 	"fmt"
-	"golang.org/x/crypto/acme/autocert"
 	"io"
 	"net/http"
 	"os"
@@ -56,22 +54,22 @@ func main() {
 	mux.HandleFunc("/test", test)
 	mux.Handle("/.tmp/", http.StripPrefix("/.tmp/", http.FileServer(http.Dir(".tmp"))))
 	mux.Handle("/assets/", http.FileServer(http.FS(assets)))
-	certManager := autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		Cache:      autocert.DirCache("certs"),
-		HostPolicy: autocert.HostWhitelist("example.com"),
-	}
+	//certManager := autocert.Manager{
+	//	Prompt:     autocert.AcceptTOS,
+	//	Cache:      autocert.DirCache("certs"),
+	//	HostPolicy: autocert.HostWhitelist("example.com"),
+	//}
+	//
+	//server := &http.Server{
+	//	Addr:    ":4480",
+	//	Handler: mux,
+	//	TLSConfig: &tls.Config{
+	//		GetCertificate: certManager.GetCertificate,
+	//	},
+	//}
 
-	server := &http.Server{
-		Addr:    ":4480",
-		Handler: mux,
-		TLSConfig: &tls.Config{
-			GetCertificate: certManager.GetCertificate,
-		},
-	}
-
-	go http.ListenAndServe(":8081", mux) //certManager.HTTPHandler(nil))
-	server.ListenAndServeTLS("", "")
+	go http.ListenAndServe(":8080", mux) //certManager.HTTPHandler(nil))
+	//server.ListenAndServeTLS("", "")
 }
 
 func test(w http.ResponseWriter, r *http.Request) {
