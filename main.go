@@ -21,12 +21,18 @@ var (
 )
 
 func init() {
-	if _, ok := os.Stat(".tmp"); ok != nil {
+	if _, ok := os.Stat(".tmp"); ok == nil {
+		err := os.RemoveAll(".tmp")
+		if err != nil {
+			fmt.Println("删除缓存文件夹出错，请检查程序权限", err)
+		}
+	} else {
 		err := os.Mkdir(".tmp", os.ModePerm)
 		if err != nil {
 			fmt.Println("创建缓存文件夹出错，请检查程序权限", err)
 		}
 	}
+
 }
 
 func welcome() {
@@ -58,7 +64,6 @@ func main() {
 			GetCertificate: certManager.GetCertificate,
 		},
 	}
-
 	go http.ListenAndServe(":8081", mux) //certManager.HTTPHandler(nil))
 	server.ListenAndServeTLS("", "")
 }
@@ -80,3 +85,5 @@ func index(w http.ResponseWriter, r *http.Request) {
 		temp.ExecuteTemplate(w, "index.html", pptter)
 	}
 }
+
+//TODO 手机端样式 按钮功能 灯箱

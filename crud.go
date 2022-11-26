@@ -29,7 +29,7 @@ type PPTTER struct {
 	GroupUser   map[*websocket.Conn]bool
 	GroupDb     chan Message
 	SendMessage chan []byte
-	Writelock   sync.Mutex
+	Writelock   sync.Mutex //锁我可能没用对，反正也没啥后果
 }
 
 type Message struct {
@@ -66,9 +66,9 @@ func (m Message) Timestr() string {
 		if temp > 0 {
 			var tempStr string
 			tempStr = strconv.FormatFloat(temp, 'f', -1, 64)
-			res = MergeString(tempStr, unit[i]) //此处调用了一个我自己封装的字符串拼接的函数（你也可以自己实现）
+			res = MergeString(tempStr, unit[i])
 		}
-		break //我想要的形式是精确到最大单位，即："2天前"这种形式，如果想要"2天12小时36分钟48秒前"这种形式，把此处break去掉，然后把字符串拼接调整下即可（别问我怎么调整，这如果都不会我也是无语）
+		break
 	}
 	return res
 }
@@ -84,6 +84,11 @@ func (t *PPTTER) crudtext(message []byte) {
 	if err != nil {
 		fmt.Println("Convert json message failed:", err)
 		return
+	}
+
+	if len(t.GroupDb) == 50 {
+		del := <-t.GroupDb
+		os.Remove(".tmp/" + del.FileName)
 	}
 	t.GroupDb <- m
 	mbyte, _ := json.Marshal(m)
@@ -103,6 +108,10 @@ func (t *PPTTER) crudbin(message []byte, name string) {
 	if err != nil {
 		fmt.Println(err)
 	}
+	if len(t.GroupDb) == 50 {
+		del := <-t.GroupDb
+		os.Remove(".tmp/" + del.FileName)
+	}
 	t.GroupDb <- m
 	mbyte, _ := json.Marshal(m)
 	t.SendMessage <- mbyte
@@ -120,6 +129,7 @@ func (t PPTTER) Gettmp() []Message {
 	return tmp
 }
 
+// 在线人数
 func (t PPTTER) Usercount() int {
 	return len(t.GroupUser)
 }
@@ -130,11 +140,7 @@ func crcname(s []byte) uint32 {
 	return v
 }
 
-/**
-* @des 拼接字符串
-* @param args ...string 要被拼接的字符串序列
-* @return string
- */
+// 字符串拼接
 func MergeString(args ...string) string {
 	buffer := bytes.Buffer{}
 	for i := 0; i < len(args); i++ {
