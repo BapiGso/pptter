@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html style="--primary-color-0:rgba(74, 144, 226, 0); --primary-color-0_5:rgba(74, 144, 226, 0.05); --primary-text-color-0:rgba(247, 247, 247, 0); --primary-color-1:rgba(74, 144, 226, 0.1); --primary-color-1_5:rgba(74, 144, 226, 0.15); --primary-text-color-1:rgba(247, 247, 247, 0.1); --primary-color-2:rgba(74, 144, 226, 0.2); --primary-color-2_5:rgba(74, 144, 226, 0.25); --primary-text-color-2:rgba(247, 247, 247, 0.2); --primary-color-3:rgba(74, 144, 226, 0.3); --primary-color-3_5:rgba(74, 144, 226, 0.35); --primary-text-color-3:rgba(247, 247, 247, 0.3); --primary-color-4:rgba(74, 144, 226, 0.4); --primary-color-4_5:rgba(74, 144, 226, 0.45); --primary-text-color-4:rgba(247, 247, 247, 0.4); --primary-color-5:rgba(74, 144, 226, 0.5); --primary-color-5_5:rgba(74, 144, 226, 0.55); --primary-text-color-5:rgba(247, 247, 247, 0.5); --primary-color-6:rgba(74, 144, 226, 0.6); --primary-color-6_5:rgba(74, 144, 226, 0.65); --primary-text-color-6:rgba(247, 247, 247, 0.6); --primary-color-7:rgba(74, 144, 226, 0.7); --primary-color-7_5:rgba(74, 144, 226, 0.75); --primary-text-color-7:rgba(247, 247, 247, 0.7); --primary-color-8:rgba(74, 144, 226, 0.8); --primary-color-8_5:rgba(74, 144, 226, 0.85); --primary-text-color-8:rgba(247, 247, 247, 0.8); --primary-color-9:rgba(74, 144, 226, 0.9); --primary-color-9_5:rgba(74, 144, 226, 0.95); --primary-text-color-9:rgba(247, 247, 247, 0.9); --primary-color-10:rgba(74, 144, 226, 1); --primary-color-10_5:rgba(74, 144, 226, 1.05); --primary-text-color-10:rgba(247, 247, 247, 1);">
+<head>
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+    <title>{{.roomname}}聊天室</title>
+    <meta content="开源聊天室，pptter" name="keywords">
+    <meta content="pptter是基于GO开发的开源网页聊天室,使用net/http和WebSocket协议通讯,简单易上手"
+          name="description">
+    <meta content="smoe.cc" name="author">
+    <meta content="viewport-fit=cover,width=device-width,initial-scale=1,maximum-scale=1,minimum-scale=1,user-scalable=no"
+          name="viewport">
+    <link href="/assets/favicon-192.jpg" rel="shortcut icon">
+    <meta content="yes" name="apple-mobile-web-app-capable">
+    <meta content="black" name="apple-mobile-web-app-status-bar-style">
+    <meta content="pptter" name="apple-mobile-web-app-title">
+    <meta content="/favicon-192.png" name="msapplication-TileImage">
+    <meta content="#333" name="msapplication-TileColor">
+    <meta content="yes" name="apple-mobile-web-app-capable">
+    <meta content="yes" name="apple-touch-fullscreen">
+    <input data-inspect-config="3" id="_w_simile" type="hidden">
+    <link href="/assets/css/qianduan.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+<div id="app">
+    <div class="app--3Brx7 g1yaz81g"
+         style="background-image: url(/assets/background.webp); background-size: 1920px 1080px; background-repeat: no-repeat;">
+        <div class="blur--2lxPV"
+             style="background-position: -384px -46.85px; background-image: url(/assets/background.webp); background-size: 1920px 1080px; background-repeat: no-repeat; width: 60%; height: 90%; left: 20%; top: 5%;"></div>
+        <div class="child--d7f8p" style="width: 60%; height: 90%; left: 20%; top: 5%;">
+            <div class="sidebar--3agUD" data-aero="false"><img alt="" class="avatar--2MguP"
+                                                               src="/assets/favicon-192.jpg"
+                                                               style="width: 60px; height: 60px; border-radius: 30px;">
+                <div class="onlineStatus--1EWHm status--3MkNG">
+                    <div class="status--h0vkT online"></div>
+                </div>
+                <div class="buttons--2iVHM">
+                    <div>
+                        <div class="iconButton--zsK75 " onclick="btn.about();" role="button"
+                             style="width: 40px; height: 40px;"><i
+                                class="iconfont icon-about" style="font-size: 26px; line-height: 40px;"></i></div>
+                    </div>
+                    <div>
+                        <div class="iconButton--zsK75 " role="button" style="width: 40px; height: 40px;"><i
+                                class="iconfont icon-setting" style="font-size: 26px; line-height: 40px;"></i></div>
+                    </div>
+                    <div>
+                        <div class="iconButton--zsK75 " onclick="btn.logout();" role="button" style="width: 40px; height: 40px;"><i
+                                class="iconfont icon-logout" style="font-size: 26px; line-height: 40px;"></i></div>
+                    </div>
+                </div>
+            </div>
+            <div class="chat--5eOCD" data-aero="false">
+                <div class="headerBar--3eAZ-" data-aero="false"><h2 class="name--3NR0g"><span>{{.roomname}} <b
+                        class="c1n0oawq">({{.online}})</b></span></h2>
+                    <div data="{{.username}}" id="username"></div>
+                    <div class="buttonContainer--3gzNM rightButtonContainer--2lgXw">
+                        <div class="iconButton--zsK75 " role="button" style="width: 40px; height: 40px;"><i
+                                class="iconfont icon-share" style="font-size: 24px; line-height: 40px;"></i></div>
+                        <div class="iconButton--zsK75 " role="button" style="width: 40px; height: 40px;"><i
+                                class="iconfont icon-gongneng" style="font-size: 24px; line-height: 40px;"></i></div>
+                    </div>
+                </div>
+                <div class="c8a3pfk">
+                    <div class="messageList--3GslJ show-scrollbar">
+                        <div class="message--2HA4o "><img alt="" class="avatar--sQ2bN"
+                                                          src="/assets/img/11.jpg"
+                                                          style="width: 44px; height: 44px; border-radius: 22px;">
+                            <div class="right--A6GtN">
+                                <div class="nicknameTimeBlock--Bzuab"><span class="tag--1ttf_"
+                                                                            style="background-color: rgb(4, 101, 107);">Golang</span><span
+                                        class="nickname--PgNfc">ROOT</span><span
+                                        class="time--x-3HR">11/4 08:39</span></div>
+                                <div class="contentButtonBlock--RkzTW">
+                                    <div class="content--myZst">
+                                        <div class="textMessage--3_l_E">欢迎来到{{.roomname}}聊天室</div>
+                                    </div>
+                                </div>
+                                <div class="arrow--3tM4-"></div>
+                            </div>
+                        </div>
+                        <div class="message--2HA4o "><img alt="" class="avatar--sQ2bN"
+                                                          src="/assets/img/11.jpg"
+                                                          style="width: 44px; height: 44px; border-radius: 22px;">
+                            <div class="right--A6GtN">
+                                <div class="nicknameTimeBlock--Bzuab"><span class="tag--1ttf_"
+                                                                            style="background-color: rgb(4, 101, 107);">Golang</span><span
+                                        class="nickname--PgNfc">ROOT</span><span
+                                        class="time--x-3HR">11/4 08:39</span></div>
+                                <div class="contentButtonBlock--RkzTW">
+                                    <div class="content--myZst">
+                                        <div class="textMessage--3_l_E">聊天室使用Go1.18.2开发，使用WebSocket协议通讯</div>
+                                    </div>
+                                </div>
+                                <div class="arrow--3tM4-"></div>
+                            </div>
+                        </div>
+                        <div class="message--2HA4o "><img alt="" class="avatar--sQ2bN"
+                                                          src="/assets/img/11.jpg"
+                                                          style="width: 44px; height: 44px; border-radius: 22px;">
+                            <div class="right--A6GtN">
+                                <div class="nicknameTimeBlock--Bzuab"><span class="tag--1ttf_"
+                                                                            style="background-color: rgb(4, 101, 107);">Golang</span><span
+                                        class="nickname--PgNfc">ROOT</span><span
+                                        class="time--x-3HR">11/4 08:39</span></div>
+                                <div class="contentButtonBlock--RkzTW">
+                                    <div class="content--myZst">
+                                        <div class="textMessage--3_l_E">聊天记录保存在内存中，超过50条自动销毁</div>
+                                    </div>
+                                </div>
+                                <div class="arrow--3tM4-"></div>
+                            </div>
+                        </div>
+                        {{ with .db }}
+                        {{ range . }}
+                        {{ with . }}
+                        <div class="message--2HA4o "><img alt="" class="avatar--sQ2bN"
+                                                          src="/assets/{{ .portrait }}"
+                                                          style="width: 44px; height: 44px; border-radius: 22px;">
+                            <div class="right--A6GtN">
+                                <div class="nicknameTimeBlock--Bzuab"><span
+                                        class="nickname--PgNfc">{{ .name }}</span><span
+                                        class="time--x-3HR">{{ .time }}</span></div>
+                                <div class="contentButtonBlock--RkzTW">
+                                    <div class="content--myZst">
+                                        <div class="textMessage--3_l_E">{{ .say }}</div>
+                                    </div>
+                                </div>
+                                <div class="arrow--3tM4-"></div>
+                            </div>
+                        </div>
+                        {{ end }}
+                        {{- end }}
+                        {{ end }}
+                    </div>
+                </div>
+                <div class="chatInput--1zxUM" data-aero="false">
+                    <div class="iconButton--zsK75 iconButton--22fm8" role="button" style="width: 44px; height: 44px;"><i
+                            class="iconfont icon-expression" style="font-size: 32px; line-height: 44px;"></i></div>
+                    <div class="iconButton--zsK75 iconButton--22fm8" role="button" style="width: 44px; height: 44px;"><i
+                            class="iconfont icon-feature" style="font-size: 32px; line-height: 44px;"></i></div>
+                    <form autocomplete="off" class="form--m6M1I" οnkeydοwn="return false">
+                        <input class="input--2NAmh" maxlength="2048" placeholder="随便聊点啥吧, 不要无意义刷屏~~" type="text">
+                        <i class="iconfont icon-about tooltip--29fCa"></i>
+                    </form>
+                    <div class="iconButton--zsK75 iconButton--22fm8" onclick="btn.sendmessage();" role="button"
+                         style="width: 44px; height: 44px;"><i
+                            class="iconfont icon-send" style="font-size: 32px; line-height: 44px;"></i></div>
+                    <div class="atPanel--29aH7"></div>
+                </div>
+                <div class="groupManagePanel--uBCXe hide" data-float-panel="true" role="button">
+                    <div class="container--1Ecil hide--31c5u"><p class="title--29Nl1">群组信息</p>
+                        <div class="content--1RuMi">
+                            <div class="block--ZDLAg"><p class="blockTitle--1jSzV">功能</p>
+                                <button class="b7qxkft danger button--3-Gl7" type="button">退出群组</button>
+                            </div>
+                            <div class="block--ZDLAg"><p class="blockTitle--1jSzV">在线成员 &nbsp;<span>0</span></p>
+                                <div></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<div>
+    <div class="about">
+        <div class="rc-dialog-mask rc-dialog-mask-hidden"></div>
+        <div aria-labelledby="rcDialogTitle0" class="rc-dialog-wrap " role="dialog" style="display: none;"
+             tabindex="-1">
+            <div class="rc-dialog about--30ZA6" role="document">
+                <div aria-hidden="true" style="width: 0px; height: 0px; overflow: hidden; outline: none;"
+                     tabindex="0"></div>
+                <div class="rc-dialog-content">
+                    <button aria-label="Close" class="rc-dialog-close" onclick="btn.about();" type="button"><span
+                            class="rc-dialog-close-x"></span></button>
+                    <div class="rc-dialog-header">
+                        <div class="rc-dialog-title" id="rcDialogTitle0">关于</div>
+                    </div>
+                    <div class="rc-dialog-body">
+                        <div>
+                            <div class="block--RJ_qP"><p class="title--Lbu6-">pptter</p><a href="https://github.com/BapiGso/pptter"
+                                                                                           rel="noopener noreferrer"
+                                                                                           target="_black">https://github.com/BapiGso/pptter</a>
+                            </div>
+                            <div class="block--RJ_qP"><p class="title--Lbu6-">Golang编写的简易聊天室</p>
+                                <ul>
+                                    <li>使用WebSocket通讯</li>
+                                    <li>数据存于内存中，50条后销毁</li>
+                                    <li>建议使用https(即使证书失效)</li>
+                                </ul>
+                            </div>
+                            <div class="block--RJ_qP"><p class="title--Lbu6-">作者</p>
+                                <ul>
+                                    <li><a href="https://smoe.cc"
+                                           rel="noopener noreferrer"
+                                           target="_black">smoe.cc</a>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="block--RJ_qP"><p class="title--Lbu6-">名字？</p>
+                                <ul>
+                                    <li>可能来源于青椒苦瓜汤</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div aria-hidden="true" style="width: 0px; height: 0px; overflow: hidden; outline: none;"
+                     tabindex="0"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div>
+    <div class="logout">
+        <div class="rc-dialog-mask rc-dialog-mask-hidden"></div>
+        <div class="rc-dialog-wrap " role="dialog" style="display: none;" tabindex="-1">
+            <div class="rc-dialog infoDialog--2CPXs" role="document">
+                <div aria-hidden="true" style="width: 0px; height: 0px; overflow: hidden; outline: none;"
+                     tabindex="0"></div>
+                <div aria-hidden="true" style="width: 0px; height: 0px; overflow: hidden; outline: none;"
+                     tabindex="0"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<div style="position: absolute; top: 0px; left: 0px; width: 100%;">
+    <div>
+        <div class="rc-tooltip  rc-tooltip-placement-right  rc-tooltip-hidden" style="left: 448px; top: 663px;">
+            <div class="rc-tooltip-content">
+                <div class="rc-tooltip-arrow"></div>
+                <div class="rc-tooltip-inner" role="tooltip"><span>打赏</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+<div style="position: absolute; top: 0px; left: 0px; width: 100%;">
+    <div>
+        <div class="rc-tooltip  rc-tooltip-placement-right  rc-tooltip-hidden" style="left: 448px; top: 713px;">
+            <div class="rc-tooltip-content">
+                <div class="rc-tooltip-arrow"></div>
+                <div class="rc-tooltip-inner" role="tooltip"><span>关于</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+<div style="position: absolute; top: 0px; left: 0px; width: 100%;">
+    <div>
+        <div class="rc-tooltip  rc-tooltip-placement-right  rc-tooltip-hidden" style="left: 448px; top: 763px;">
+            <div class="rc-tooltip-content">
+                <div class="rc-tooltip-arrow"></div>
+                <div class="rc-tooltip-inner" role="tooltip"><span>设置</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+<script src="/assets/reconnecting-websocket.min.js" type="text/javascript"></script>
+<script>
+    // Create WebSocket connection.
+    const socket = new ReconnectingWebSocket(((window.location.protocol === "https:") ? "wss://" : "ws://") + window.location.host + "/ws");
+    const username = String(document.getElementById('username').getAttribute('data'))
+    const message2HA4o = document.getElementsByClassName('message--2HA4o ')
+    const form = document.getElementsByClassName('form--m6M1I')[0];
+    undelscr()
+    // Listen for messages
+    socket.addEventListener('message', function (event) {
+        var json = JSON.parse(event.data)
+        message2HA4oclone = message2HA4o[0].cloneNode(true);
+        var node = message2HA4oclone.getElementsByClassName('tag--1ttf_')[0]
+        if (node.parentNode) {
+            node.parentNode.removeChild(node);
+        }
+        message2HA4oclone.getElementsByClassName('avatar--sQ2bN')[0].src = "/assets/" + json["portrait"]
+        message2HA4oclone.getElementsByClassName('nickname--PgNfc')[0].innerHTML = json["name"]
+        message2HA4oclone.getElementsByClassName('time--x-3HR')[0].innerHTML = json["time"]
+        message2HA4oclone.getElementsByClassName('textMessage--3_l_E')[0].innerHTML = json["say"]
+        //console.log(message2HA4oclone)
+        if (json["name"] == username) {
+            message2HA4oclone.className = "message--2HA4o self--1SFKv"
+        }
+        document.getElementsByClassName('messageList--3GslJ show-scrollbar')[0].appendChild(message2HA4oclone)
+        undelscr()
+    });
+
+    let btn = {
+        about() {
+            var aboutclass = document.getElementsByClassName("about")[0]
+            if (aboutclass.children[0].className == "rc-dialog-mask") {
+                aboutclass.children[0].className = "rc-dialog-mask rc-dialog-mask-hidden"
+                aboutclass.children[1].style.display = "none"
+            } else {
+                aboutclass.children[0].className = "rc-dialog-mask"
+                aboutclass.children[1].style.display = ""
+            }
+        },
+        setting() {
+        },
+        logout() {
+            document.cookie="GOSESSID=;"
+            location.reload();
+        },
+        sendmessage: function () {
+            var json = {}
+            json['name'] = username
+            json['say'] = String(document.getElementsByClassName('input--2NAmh')[0].value)
+            socket.send(JSON.stringify(json));
+            document.getElementsByClassName('input--2NAmh')[0].value = null
+            return false
+        },
+    }
+
+
+    //滚动条置底
+    function undelscr() {
+        var currentLocation =document.getElementsByClassName('messageList--3GslJ show-scrollbar')[0]
+        currentLocation.scrollTop=currentLocation.scrollHeight
+    }
+
+    //遍历聊天加属性
+    for (const elem of message2HA4o) {
+        if (elem.getElementsByClassName('nickname--PgNfc')[0].innerHTML == username) {
+            elem.className = "message--2HA4o self--1SFKv"
+        }
+    }
+
+    //拦截表单提交
+    form.onsubmit = function (e) {
+        var e = e || window.event;
+        if (e.preventDefault) e.preventDefault();
+        else window.event.returnValue = false;
+        btn.sendmessage()
+    }
+</script>
+</body>
+</html>

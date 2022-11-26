@@ -40,7 +40,8 @@ type Message struct {
 	Filetype string
 }
 
-func (m *Message) Name2avatar() string {
+func (m Message) Name2avatar() string {
+	//服了golang这个老六了，uint32逸出和前端半天对不上
 	v := crc32.ChecksumIEEE([]byte(m.Name))
 	return strconv.Itoa(int(v))[:2]
 }

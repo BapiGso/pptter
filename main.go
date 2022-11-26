@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"embed"
 	_ "embed"
-	"flag"
 	"fmt"
 	"golang.org/x/crypto/acme/autocert"
 	"io"
@@ -31,15 +30,16 @@ func init() {
 }
 
 func welcome() {
-	flag.StringVar(&port, "p", "8443", "运行端口，默认8443")
-	flag.StringVar(&roomname, "n", "PPTTER", "聊天室名，默认PPTTER")
-	flag.Parse()
-	go fmt.Printf("Starting server at https://localhost:%v\n ", port)
-	go fmt.Scan()
+	//flag.StringVar(&port, "p", "8443", "运行端口，默认8443")
+	//flag.StringVar(&roomname, "n", "PPTTER", "聊天室名，默认PPTTER")
+	//flag.Parse()
+	//go fmt.Printf("Starting server at https://localhost:%v\n ", port)
+	//go fmt.Scan()
 }
 
 func main() {
 	//welcome()
+	go fmt.Scan()
 	//router := httprouter.New()
 	//router.ServeFiles("/embed/*filepath", http.FS(assets))
 	////router.GET("/assets/*filepath", func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
@@ -63,7 +63,7 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:    ":443",
+		Addr:    ":4480",
 		Handler: mux,
 		TLSConfig: &tls.Config{
 			GetCertificate: certManager.GetCertificate,
