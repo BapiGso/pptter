@@ -1,11 +1,9 @@
 package main
 
 import (
-	"crypto/tls"
 	"embed"
 	_ "embed"
 	"fmt"
-	"golang.org/x/crypto/acme/autocert"
 	"io"
 	"net/http"
 	"os"
