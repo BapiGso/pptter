@@ -40,12 +40,14 @@ type Message struct {
 	Filetype string
 }
 
+// 根据名字用crc32校验生成头像
 func (m Message) Name2avatar() string {
 	//服了golang这个老六了，uint32逸出和前端半天对不上
 	v := crc32.ChecksumIEEE([]byte(m.Name))
 	return strconv.Itoa(int(v))[:2]
 }
 
+// 时间戳转日期
 func (m Message) Timestr() string {
 	//tm := time.Unix(m.Time, 0)
 	//return tm.Format("01-02 15:04")
@@ -73,11 +75,13 @@ func (m Message) Timestr() string {
 	return res
 }
 
+// 判断文件类型
 func (m Message) Filetypecut() string {
 	cut := strings.Split(m.Filetype, "/")
 	return cut[0]
 }
 
+// 文本消息处理
 func (t *PPTTER) crudtext(message []byte) {
 	m := Message{}
 	err := json.Unmarshal(message, &m)
@@ -95,8 +99,9 @@ func (t *PPTTER) crudtext(message []byte) {
 	t.SendMessage <- mbyte
 }
 
+// 文件消息处理
 func (t *PPTTER) crudbin(message []byte, name string) {
-	filename := strconv.Itoa(int(crcname(message)))
+	filename := strconv.Itoa(int(crc32.ChecksumIEEE(message)))
 	m := Message{
 		Name:     name,
 		Time:     time.Now().Unix(),
@@ -117,6 +122,7 @@ func (t *PPTTER) crudbin(message []byte, name string) {
 	t.SendMessage <- mbyte
 }
 
+// 消息打包成切片，发给http渲染
 func (t PPTTER) Gettmp() []Message {
 	tmp := make([]Message, 0, 50)
 	t.Writelock.TryLock()
@@ -132,12 +138,6 @@ func (t PPTTER) Gettmp() []Message {
 // 在线人数
 func (t PPTTER) Usercount() int {
 	return len(t.GroupUser)
-}
-
-// 字符串校验，用于生成头像
-func crcname(s []byte) uint32 {
-	v := crc32.ChecksumIEEE(s)
-	return v
 }
 
 // 字符串拼接
