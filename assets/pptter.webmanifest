@@ -1,0 +1,27 @@
+{
+    "name": "pptter",
+    "short_name": "pptter",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#FAFAFA",
+    "description": "pptter是基于GO开发的开源网页聊天室,使用net/http和WebSocket协议通讯,简单易上手",
+    "orientation": "portrait-primary",
+    "theme_color": "#4a90e2",
+    "icons": [
+        {
+            "src": "/assets/144.webp",
+            "sizes": "144x144",
+            "type": "image/webp"
+        },
+        {
+            "src": "/assets/192.webp",
+            "sizes": "192x192",
+            "type": "image/webp"
+        },
+        {
+            "src": "/assets/512.webp",
+            "sizes": "512x512",
+            "type": "image/webp"
+        }
+    ]
+}

@@ -9,7 +9,7 @@
 ## 安装
 
 请到[releases](https://github.com/BapiGso/pptter/releases)界面下载对应平台的二进制文件
-运行
+运行和参数
 ``
   ./pptter
 ``
@@ -36,4 +36,4 @@
 
 ## TODO
  - 灯箱
- - PWA
+ - 时间戳转日期bug

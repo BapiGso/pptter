@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"embed"
 	_ "embed"
+	"flag"
 	"fmt"
 	"golang.org/x/crypto/acme/autocert"
 	"io"
@@ -16,8 +17,7 @@ import (
 var assets embed.FS
 
 var (
-	port, roomname string
-	temp, _        = template.ParseFS(assets, "assets/*.html")
+	temp, _ = template.ParseFS(assets, "assets/*.html")
 )
 
 func init() {
@@ -39,37 +39,42 @@ func init() {
 
 }
 
-func welcome() {
-	//flag.StringVar(&port, "p", "8443", "运行端口，默认8443")
-	//flag.StringVar(&roomname, "n", "PPTTER", "聊天室名，默认PPTTER")
-	//flag.Parse()
-	//go fmt.Printf("Starting server at https://localhost:%v\n ", port)
-	//go fmt.Scan()
-}
-
 func main() {
-	//welcome()
 	go fmt.Scan()
+	domain := flag.String("domain", "", "绑定域名，用于申请ssl证书")
+	usetls := flag.Bool("https", false, "该参数会自动申请证书并占用80和443端口")
+	port := flag.String("port", "80", "运行端口，默认80")
+	flag.Parse()
+	fmt.Println(*usetls)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", index)
 	mux.HandleFunc("/ws", handleConnections)
 	mux.Handle("/.tmp/", http.StripPrefix("/.tmp/", http.FileServer(http.Dir(".tmp"))))
 	mux.Handle("/assets/", http.FileServer(http.FS(assets)))
-	certManager := autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		Cache:      autocert.DirCache("certs"),
-		HostPolicy: autocert.HostWhitelist("example.com"),
-	}
+	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
+		file, _ := assets.ReadFile("assets/js/sw.js")
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		w.Write(file)
+	})
+	if *usetls {
+		certManager := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			Cache:      autocert.DirCache("certs"),
+			HostPolicy: autocert.HostWhitelist("example.com", *domain),
+		}
 
-	server := &http.Server{
-		Addr:    ":4480",
-		Handler: mux,
-		TLSConfig: &tls.Config{
-			GetCertificate: certManager.GetCertificate,
-		},
+		server := &http.Server{
+			Addr:    ":443",
+			Handler: mux,
+			TLSConfig: &tls.Config{
+				GetCertificate: certManager.GetCertificate,
+			},
+		}
+		go http.ListenAndServe(":80", certManager.HTTPHandler(nil))
+		server.ListenAndServeTLS("", "")
+	} else {
+		http.ListenAndServe(":"+*port, mux)
 	}
-	go http.ListenAndServe(":8081", mux) //certManager.HTTPHandler(nil))
-	server.ListenAndServeTLS("", "")
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
@@ -82,12 +87,12 @@ func index(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: string(reqbody[:4]), Value: string(reqbody[5:])})
 		http.Redirect(w, r, "/", 302)
 	}
-	_, err := r.Cookie("name")
-	if err != nil {
+
+	if _, err := r.Cookie("name"); err != nil {
 		temp.ExecuteTemplate(w, "login.html", nil)
 	} else {
 		temp.ExecuteTemplate(w, "index.html", pptter)
 	}
 }
 
-//TODO 手机端样式 按钮功能 灯箱 jsaudio音乐提醒 pwa
+//TODO 按钮功能 灯箱 发命令

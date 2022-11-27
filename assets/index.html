@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>PPTTER</title>
-    <link href="/assets/pptter.json" rel="manifest">
-    <link href="/assets/favicon-192.jpg" rel="shortcut icon">
+    <link href="/assets/pptter.webmanifest" rel="manifest">
+    <link href="/assets/192.webp" rel="shortcut icon">
     <link href="/assets/css/index.css" rel="stylesheet" type="text/css">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta content="开源聊天室，pptter" name="keywords">
@@ -14,6 +14,10 @@
     </style>
 </head>
 <body>
+<div id="info">
+    <h3>关于</h3>
+    <h5></h5>
+</div>
 <div class="shadow"></div>
 <div class="sidebar">
     <div class="list"></div>
@@ -133,7 +137,6 @@
         <line x1="12" x2="12" y1="11" y2="17"/>
         <polyline points="9 14 12 11 15 14"/>
     </svg>
-    <input id="uploadfile" type="file" name="file" style="display: none">
     <svg class="icon icon-tabler icon-tabler-send" fill="none" height="30" stroke="#9e9e9e"
          stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="30"
          xmlns="http://www.w3.org/2000/svg">
@@ -185,7 +188,7 @@
         }
 
         document.getElementsByClassName("message-list")[0].appendChild(tmp)
-        playNote(350, context.currentTime + 0.1, 0.22);
+        playNote(350, context.currentTime + 0.1, 0.2);
         document.getElementsByClassName("tele")[0].scrollTop=document.getElementsByClassName("tele")[0].scrollHeight
     });
 
@@ -204,12 +207,6 @@
         document.getElementById("inputext").value=""
         return false
     }
-
-    var btn = document.getElementsByClassName("icon")
-    btn[5].addEventListener("click", function () {
-        document.getElementById("uploadfile").click();
-    })
-    btn[6].addEventListener("click", message.send)
 
     document.body.addEventListener("drop", function (e) {
             e.preventDefault(); //取消默认浏览器拖拽效果
@@ -234,7 +231,6 @@
     }, false);
 
     document.body.addEventListener('paste', function (event) {
-        //console.dir(event.clipboardData.files);// 获取文件
         socket.send(event.clipboardData.files[0]);
     })
 
@@ -252,6 +248,55 @@
     }
     document.getElementsByClassName("tele")[0].scrollTop=document.getElementsByClassName("tele")[0].scrollHeight
 
+</script>
+<script>
+    var btn = document.getElementsByClassName("icon")
 
+    btn[0].addEventListener("click", function () {
+        window.open("https://github.com/BapiGso/pptter");
+    })
+    btn[1].addEventListener("click", function () {
+    })
+    btn[2].addEventListener("click", function () {
+    })
+    //分享
+    btn[3].addEventListener("click", function () {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(location);
+        }
+        var x = document.createElement('div')
+        x.setAttribute("id","notification")
+        x.innerText="已复制到剪贴板，去邀请其他人加入群组吧"
+        document.body.append(x)
+        setTimeout(function() {document.getElementById("notification").style.opacity=0}, 750)
+        setTimeout(function() {document.getElementById("notification").remove()}, 1500)
+
+    })
+    //表情
+    btn[4].addEventListener("click", function () {
+        alert(4)
+    })
+    btn[5].addEventListener("click", function () {
+        //<input id="uploadfile" type="file" name="file" style="display: none">
+        var x = document.createElement('input')
+        x.setAttribute("type","file")
+        x.click()
+    })
+    btn[6].addEventListener("click", message.send)
+</script>
+<script>
+    navigator.serviceWorker && navigator.serviceWorker.register('/sw.js').then(() => {
+        //
+    })
+
+    // 「弹出添加到主屏对话框」事件
+    window.addEventListener('beforeinstallprompt', event => {
+        // 这个 `event.userChoice` 是一个 Promise ，在用户选择后 resolve
+        event.userChoice.then(result => {
+            console.log(result.outcome)
+            // 'accepted': 添加到主屏
+            // 'dismissed': 用户不想理你并向你扔了个取消
+        })
+    })
 </script>
 </html>

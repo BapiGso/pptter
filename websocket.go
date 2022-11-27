@@ -4,6 +4,7 @@ import (
 	"github.com/gorilla/websocket"
 	"log"
 	"net/http"
+	"net/url"
 )
 
 // var broadcast = make(chan string)
@@ -22,12 +23,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		log.Println("ws连接出错:", err)
 	}
 	defer ws.Close()
-
 	pptter.GroupUser[ws] = true
-	username, err := r.Cookie("name")
+
+	name, err := r.Cookie("name")
 	if err != nil {
 		log.Println("读取cookie出错", err)
 	}
+	namedecode, _ := url.QueryUnescape(name.Value)
+
 	//读消息
 	go func() {
 		for {
@@ -43,7 +46,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			case websocket.TextMessage:
 				pptter.crudtext(message)
 			case websocket.BinaryMessage:
-				pptter.crudbin(message, username.Value)
+				pptter.crudbin(message, namedecode)
 			case websocket.CloseMessage:
 			case websocket.PingMessage:
 			case websocket.PongMessage:
