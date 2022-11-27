@@ -78,7 +78,7 @@ func main() {
 
 func index(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
-		http.Error(w, "404", 404)
+		http.Error(w, "success but not found", 204)
 		return
 	}
 	if r.Method == "POST" {

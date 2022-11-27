@@ -7,7 +7,6 @@ import (
 	"net/url"
 )
 
-// var broadcast = make(chan string)
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
