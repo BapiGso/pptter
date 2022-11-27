@@ -17,7 +17,7 @@
 ## 开发
 
  - 使用text/template解析html模板
- - 使用map键值对存储数据，无需数据库
+ - 使用chan队列存储数据，无需数据库
  - 使用WebSocket协议通讯
  - 使用embed打包静态文件
  - 前端来自于[fiora](https://github.com/yinxin630/fiora)

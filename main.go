@@ -45,7 +45,6 @@ func main() {
 	usetls := flag.Bool("https", false, "该参数会自动申请证书并占用80和443端口")
 	port := flag.String("port", "80", "运行端口，默认80")
 	flag.Parse()
-	fmt.Println(*usetls)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", index)
 	mux.HandleFunc("/ws", handleConnections)

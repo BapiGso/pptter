@@ -199,7 +199,7 @@
 
     message.send = function () {
         this.name = username
-        this.time = Date.parse(new Date());
+        this.time = (Math.floor(Date.parse(new Date())/1000));
         this.say = document.getElementById("inputext").value
         if(!this.say)return false;
         socket.send(JSON.stringify(this));
