@@ -26,6 +26,10 @@ func init() {
 		if err != nil {
 			fmt.Println("删除缓存文件夹出错，请检查程序权限", err)
 		}
+		err = os.Mkdir(".tmp", os.ModePerm)
+		if err != nil {
+			fmt.Println("创建缓存文件夹出错，请检查程序权限", err)
+		}
 	} else {
 		err := os.Mkdir(".tmp", os.ModePerm)
 		if err != nil {
@@ -86,4 +90,4 @@ func index(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//TODO 手机端样式 按钮功能 灯箱
+//TODO 手机端样式 按钮功能 灯箱 jsaudio音乐提醒 pwa

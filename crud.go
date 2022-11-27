@@ -17,7 +17,7 @@ import (
 
 var pptter = PPTTER{
 	GroupNum:    1,
-	GroupName:   "HD9990",
+	GroupName:   "pptter",
 	GroupUser:   make(map[*websocket.Conn]bool),
 	GroupDb:     make(chan Message, 50),
 	SendMessage: make(chan []byte),
