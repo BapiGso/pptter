@@ -4,10 +4,11 @@ web:
   logtype: console
   # 【日志级别】：info、debug、error
   loglevel: info
+  # 【绑定域名】用于申请ssl证书
+  domain:
   # 【WEB管理界面端口】：默认80
   web_port: 80
   # 【WEB管理界面使用的HTTPS的证书和KEY的路径】，留空则不启用HTTPS
+  ssl_port:
   ssl_cert:
   ssl_key:
-  # 【绑定域名】用于申请ssl证书
-  domain:

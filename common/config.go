@@ -18,10 +18,11 @@ var Config config
 
 type WEBINFO struct {
 	Logtype  string `yaml:"logtype"`
-	Loglevel string `yaml:"loglevel"` //日志级别
-	WebPort  string `yaml:"web_port"` //web端口
-	SslCert  string `yaml:"ssl_cert"` //ssl配置cert
-	SslKey   string `yaml:"ssl_key"`  //ssl配置key
+	Loglevel string `yaml:"loglevel"`    //日志级别
+	WebPort  string `yaml:"web_port"`    //web端口
+	SslPort  string `yaml:"sslweb_port"` //sslweb端口
+	SslCert  string `yaml:"ssl_cert"`    //ssl配置cert
+	SslKey   string `yaml:"ssl_key"`     //ssl配置key
 	Domain   string `yaml:"domain"`
 }
 
@@ -61,5 +62,4 @@ func unmarshalConfig(config interface{}, configName string) {
 
 func init() {
 	unmarshalConfig(&Config, "config.yaml")
-
 }
