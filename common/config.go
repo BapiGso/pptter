@@ -65,5 +65,7 @@ func unmarshalConfig(config interface{}, configName string) {
 
 func init() {
 	unmarshalConfig(&Config, "config.yaml")
-
+	if Config.WEBINFO.WebPort == "" {
+		Config.WEBINFO.WebPort = "80"
+	}
 }
