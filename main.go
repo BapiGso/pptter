@@ -17,10 +17,7 @@ import (
 
 //go:embed assets
 var assets embed.FS
-
-var (
-	temp, _ = template.ParseFS(assets, "assets/*.html")
-)
+var temp, _ = template.ParseFS(assets, "assets/*.html")
 
 func init() {
 	if _, ok := os.Stat(".tmp"); ok == nil {
@@ -98,4 +95,4 @@ func index(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//TODO 按钮功能 发命令
+//TODO 按钮功能 发命令 灯箱bug

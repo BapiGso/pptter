@@ -11,5 +11,5 @@ self.addEventListener('install', function(e) {
 });
 
 self.addEventListener('fetch', function(e) {
-    console.log('[Service Worker] Fetched resource '+e.request.url);
+    //console.log('[Service Worker] Fetched resource '+e.request.url);
 });

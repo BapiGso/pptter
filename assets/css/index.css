@@ -56,7 +56,7 @@ body {
 }
 
 .groupbar .search {
-    flex-grow: 1;
+    flex: 1;
     display: flex;
     flex-direction: row;
     justify-content: center;
@@ -74,7 +74,7 @@ body {
 
 
 .groupbar .linklist {
-    flex-grow: 15;
+    flex: 15;
     display: flex;
     flex-direction: column;
 }
@@ -85,7 +85,7 @@ body {
     grid-template-areas:
             "avatar name     "
             "avatar content  ";
-    grid-template-columns: 1fr 5fr;
+    grid-template-columns: 50px 1fr;
     grid-template-rows: 1fr 1fr;
     background-color: rgb(5 159 149 / 40%);
     align-items: center;
@@ -196,7 +196,7 @@ h3 span {
         "avatar name     time"
         "avatar content  content"
         ".      content  content";
-    grid-template-columns: 50px 50px 1fr;
+    grid-template-columns: 50px 1fr 15fr;
     grid-template-rows: 20px 1fr 1fr;
     margin: 20px;
 }
@@ -208,12 +208,11 @@ h3 span {
         "content content  avatar"
         "content content  .";
     justify-items: end;
-    grid-template-columns: 1fr 50px 50px;
+    grid-template-columns: 15fr 1fr 50px;
 }
 
 .message-obj img {
     grid-area: avatar;
-    pointer-events:none;
 }
 
 .message-obj .name {
@@ -283,6 +282,9 @@ h3 span {
     grid-area: 8/13/12/23;
 }
 
+.avatar{
+    pointer-events:none;
+}
 
 
 @media screen and (max-width: 780px) {
