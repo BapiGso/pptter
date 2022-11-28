@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"pptter/common"
 	"text/template"
 )
 
@@ -34,15 +35,14 @@ func init() {
 			fmt.Println("创建缓存文件夹出错，请检查程序权限", err)
 		}
 	}
-
 }
 
 func main() {
-	domain := flag.String("d", "", "绑定域名，用于自动申请ssl证书，该参数会强制占用80和443端口")
-	port := flag.String("p", "80", "运行端口，默认80")
-	tlsport := flag.String("tlsp", "", "tls运行端口，默认不开启")
-	tlscer := flag.String("tlsc", "", "tls证书路径")
-	tlskey := flag.String("tlsk", "", "tls密钥路径")
+	domain := flag.String("d", config.Config.WEBINFO.Domain, "绑定域名，用于申请ssl证书")
+	port := flag.String("p", config.Config.WEBINFO.WebPort, "运行端口，默认80")
+	SslPort := flag.String("tlsp", config.Config.WEBINFO.SslPort, "tls运行端口，默认不开启")
+	SslCert := flag.String("tlsc", config.Config.WEBINFO.SslCert, "tls证书路径")
+	SslKey := flag.String("tlsk", config.Config.WEBINFO.SslKey, "tls密钥路径")
 	flag.Parse()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", index)
@@ -68,11 +68,12 @@ func main() {
 				GetCertificate: certManager.GetCertificate,
 			},
 		}
-		go log.Fatal(http.ListenAndServe(":80", certManager.HTTPHandler(nil)))
-		log.Fatal(server.ListenAndServeTLS("", ""))
+
+		go log.Fatal(http.ListenAndServe(":"+config.Config.WEBINFO.WebPort, certManager.HTTPHandler(nil)))
+		log.Fatal(server.ListenAndServeTLS(config.Config.WEBINFO.SslCert, config.Config.WEBINFO.SslKey))
 	}
-	if *tlsport != "" {
-		log.Fatal(http.ListenAndServeTLS(":"+*tlsport, *tlscer, *tlskey, mux))
+	if *SslPort != "" {
+		log.Fatal(http.ListenAndServeTLS(":"+*SslPort, *SslCert, *SslKey, mux))
 	}
 	log.Fatal(http.ListenAndServe(":"+*port, mux))
 }
