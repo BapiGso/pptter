@@ -52,7 +52,7 @@
     </div>
     <div class="linklist">
         <div class="link">
-            <img alt="" src="/assets/img/golang.jpg"
+            <img alt="" src="/assets/img/golang.jpg" class="avatar"
                  style="width: 44px; height: 44px; border-radius: 22px;">
             <span class="name">{{.GroupName}}</span>
             <span class="group-content">暂无消息</span>
@@ -75,7 +75,7 @@
 <div class="tele">
     <div class="message-list">
         <div class="message-obj ">
-            <img alt="" src="/assets/img/golang.jpg"
+            <img alt="" src="/assets/img/golang.jpg" class="avatar"
                  style="width: 44px; height: 44px; border-radius: 22px;">
             <span class="name">Golang</span>
             <span class="time">09/05</span>
@@ -85,7 +85,7 @@
 
         </div>
         <div class="message-obj ">
-            <img alt="" src="/assets/img/golang.jpg"
+            <img alt="" src="/assets/img/golang.jpg" class="avatar"
                  style="width: 44px; height: 44px; border-radius: 22px;">
             <span class="name">Golang</span>
             <span class="time">09/05</span>
@@ -96,7 +96,7 @@
         </div>
         {{range .Gettmp}}
         <div class="message-obj ">
-            <img alt="" src="/assets/img/{{.Name2avatar}}.jpg"
+            <img alt="" src="/assets/img/{{.Name2avatar}}.jpg" class="avatar"
                  style="width: 44px; height: 44px; border-radius: 22px;">
             <span class="name">{{.Name}}</span>
             <span class="time">{{.Timestr}}</span>
@@ -298,7 +298,6 @@
     navigator.serviceWorker && navigator.serviceWorker.register('/sw.js').then(() => {
         //
     })
-
     // 「弹出添加到主屏对话框」事件
     window.addEventListener('beforeinstallprompt', event => {
         // 这个 `event.userChoice` 是一个 Promise ，在用户选择后 resolve
