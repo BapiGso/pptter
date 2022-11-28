@@ -11,7 +11,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"pptter/common"
 	"text/template"
 )
 
@@ -38,11 +37,11 @@ func init() {
 }
 
 func main() {
-	domain := flag.String("d", config.Config.WEBINFO.Domain, "绑定域名，用于申请ssl证书")
-	port := flag.String("p", config.Config.WEBINFO.WebPort, "运行端口，默认80")
-	SslPort := flag.String("tlsp", config.Config.WEBINFO.SslPort, "tls运行端口，默认不开启")
-	SslCert := flag.String("tlsc", config.Config.WEBINFO.SslCert, "tls证书路径")
-	SslKey := flag.String("tlsk", config.Config.WEBINFO.SslKey, "tls密钥路径")
+	domain := flag.String("d", "", "绑定域名，用于申请ssl证书")
+	port := flag.String("p", "80", "运行端口，默认80")
+	SslPort := flag.String("tlsp", "", "tls运行端口，默认不开启")
+	SslCert := flag.String("tlsc", "", "tls证书路径")
+	SslKey := flag.String("tlsk", "", "tls密钥路径")
 	flag.Parse()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", index)
@@ -69,8 +68,8 @@ func main() {
 			},
 		}
 
-		go log.Fatal(http.ListenAndServe(":"+config.Config.WEBINFO.WebPort, certManager.HTTPHandler(nil)))
-		log.Fatal(server.ListenAndServeTLS(config.Config.WEBINFO.SslCert, config.Config.WEBINFO.SslKey))
+		go log.Fatal(http.ListenAndServe(":80", certManager.HTTPHandler(nil)))
+		log.Fatal(server.ListenAndServeTLS("", ""))
 	}
 	if *SslPort != "" {
 		log.Fatal(http.ListenAndServeTLS(":"+*SslPort, *SslCert, *SslKey, mux))
