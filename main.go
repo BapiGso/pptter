@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"golang.org/x/crypto/acme/autocert"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"pptter/common"
@@ -37,16 +38,15 @@ func init() {
 			fmt.Println("创建缓存文件夹出错，请检查程序权限", err)
 		}
 	}
-
 }
 
 func main() {
-	go fmt.Scan()
-	domain := flag.String("domain", config.Config.WEBINFO.Domain, "绑定域名，用于申请ssl证书")
-	usetls := flag.Bool("https", false, "该参数会自动申请证书并占用80和443端口")
-	port := flag.String("port", config.Config.WEBINFO.WebPort, "运行端口，默认80")
+	domain := flag.String("d", config.Config.WEBINFO.Domain, "绑定域名，用于申请ssl证书")
+	port := flag.String("p", config.Config.WEBINFO.WebPort, "运行端口，默认80")
+	SslPort := flag.String("tlsp", config.Config.WEBINFO.SslPort, "tls运行端口，默认不开启")
+	SslCert := flag.String("tlsc", config.Config.WEBINFO.SslCert, "tls证书路径")
+	SslKey := flag.String("tlsk", config.Config.WEBINFO.SslKey, "tls密钥路径")
 	flag.Parse()
-	fmt.Println(*usetls)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", index)
 	mux.HandleFunc("/ws", handleConnections)
@@ -55,15 +55,15 @@ func main() {
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
 		file, _ := assets.ReadFile("assets/js/sw.js")
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		//goland:noinspection GoUnhandledErrorResult
 		w.Write(file)
 	})
-	if *usetls {
+	if *domain != "" {
 		certManager := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			Cache:      autocert.DirCache("certs"),
 			HostPolicy: autocert.HostWhitelist("example.com", *domain),
 		}
-
 		server := &http.Server{
 			Addr:    ":443",
 			Handler: mux,
@@ -71,17 +71,19 @@ func main() {
 				GetCertificate: certManager.GetCertificate,
 			},
 		}
-		go http.ListenAndServe(":"+config.Config.WEBINFO.WebPort, certManager.HTTPHandler(nil))
-		// ssl配置
-		server.ListenAndServeTLS(config.Config.WEBINFO.SslCert, config.Config.WEBINFO.SslKey)
-	} else {
-		http.ListenAndServe(":"+*port, mux)
+
+		go log.Fatal(http.ListenAndServe(":"+config.Config.WEBINFO.WebPort, certManager.HTTPHandler(nil)))
+		log.Fatal(server.ListenAndServeTLS(config.Config.WEBINFO.SslCert, config.Config.WEBINFO.SslKey))
 	}
+	if *SslPort != "" {
+		log.Fatal(http.ListenAndServeTLS(":"+*SslPort, *SslCert, *SslKey, mux))
+	}
+	log.Fatal(http.ListenAndServe(":"+*port, mux))
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
-		http.Error(w, "404", 404)
+		http.NotFoundHandler()
 		return
 	}
 	if r.Method == "POST" {
@@ -89,7 +91,6 @@ func index(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: string(reqbody[:4]), Value: string(reqbody[5:])})
 		http.Redirect(w, r, "/", 302)
 	}
-
 	if _, err := r.Cookie("name"); err != nil {
 		temp.ExecuteTemplate(w, "login.html", nil)
 	} else {
@@ -97,4 +98,4 @@ func index(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//TODO 按钮功能 灯箱 发命令
+//TODO 按钮功能 发命令
