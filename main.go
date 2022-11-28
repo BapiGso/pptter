@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"pptter/common"
 	"text/template"
 )
 
@@ -41,9 +42,9 @@ func init() {
 
 func main() {
 	go fmt.Scan()
-	domain := flag.String("domain", "", "绑定域名，用于申请ssl证书")
+	domain := flag.String("domain", config.Config.WEBINFO.Domain, "绑定域名，用于申请ssl证书")
 	usetls := flag.Bool("https", false, "该参数会自动申请证书并占用80和443端口")
-	port := flag.String("port", "80", "运行端口，默认80")
+	port := flag.String("port", config.Config.WEBINFO.WebPort, "运行端口，默认80")
 	flag.Parse()
 	fmt.Println(*usetls)
 	mux := http.NewServeMux()
@@ -70,8 +71,9 @@ func main() {
 				GetCertificate: certManager.GetCertificate,
 			},
 		}
-		go http.ListenAndServe(":80", certManager.HTTPHandler(nil))
-		server.ListenAndServeTLS("", "")
+		go http.ListenAndServe(":"+config.Config.WEBINFO.WebPort, certManager.HTTPHandler(nil))
+		// ssl配置
+		server.ListenAndServeTLS(config.Config.WEBINFO.SslCert, config.Config.WEBINFO.SslKey)
 	} else {
 		http.ListenAndServe(":"+*port, mux)
 	}
