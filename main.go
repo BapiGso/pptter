@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypto/tls"
 	"embed"
 	_ "embed"
 	"flag"
 	"fmt"
+	"golang.org/x/crypto/acme/autocert"
 	"io"
 	"net/http"
 	"os"
@@ -39,9 +41,9 @@ func init() {
 
 func main() {
 	go fmt.Scan()
-	domain := flag.String("d", "", "绑定域名，用于申请ssl证书")
+	domain := flag.String("d", "", "绑定域名，用于申请ssl证书，该参数会强制占用80和443端口")
 	port := flag.String("p", "80", "运行端口，默认80")
-	tlsport := flag.String("tlsp", "443", "tls运行端口，默认80")
+	tlsport := flag.String("tlsp", "443", "tls运行端口，默认443")
 	tlscer := flag.String("tlsc", "", "tls证书路径")
 	tlskey := flag.String("tlsk", "", "tls密钥路径")
 	flag.Parse()
