@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"golang.org/x/crypto/acme/autocert"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"text/template"
@@ -70,13 +71,13 @@ func main() {
 				GetCertificate: certManager.GetCertificate,
 			},
 		}
-		go http.ListenAndServe(":80", certManager.HTTPHandler(nil))
-		server.ListenAndServeTLS("", "")
+		go log.Fatal(http.ListenAndServe(":80", certManager.HTTPHandler(nil)))
+		log.Fatal(server.ListenAndServeTLS("", ""))
 	}
 	if *tlsport != "" {
-		http.ListenAndServeTLS(":"+*tlsport, *tlscer, *tlskey, mux)
+		log.Fatal(http.ListenAndServeTLS(":"+*tlsport, *tlscer, *tlskey, mux))
 	}
-	http.ListenAndServe(":"+*port, mux)
+	log.Fatal(http.ListenAndServe(":"+*port, mux))
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
@@ -96,4 +97,4 @@ func index(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//TODO 按钮功能 发命令
+//TODO 按钮功能 发命令 灯箱bug
