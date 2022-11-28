@@ -9,6 +9,7 @@ body {
     grid-template-columns: repeat(36, 1fr);
     grid-template-rows: repeat(20, 1fr);
     background: url(/assets/img.png) repeat-x;
+    overflow: hidden;
 }
 
     svg:hover{
@@ -212,6 +213,7 @@ h3 span {
 
 .message-obj img {
     grid-area: avatar;
+    pointer-events:none;
 }
 
 .message-obj .name {
@@ -231,6 +233,7 @@ h3 span {
     color: #666;
     font-size: 10px;
     margin-left: 1%;
+    user-select: none;
 }
 
 .message-content {
