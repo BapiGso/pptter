@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/wonderivan/logger"
 	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"os"
@@ -46,15 +47,18 @@ func unmarshalConfig(config interface{}, configName string) {
 			Root = cfgName
 		}
 		if err = yaml.Unmarshal(bytes, config); err != nil {
-			panic(err.Error())
+			//panic(err.Error())
+			logger.Warn(err.Error())
 		}
 	} else {
 		bytes, err := ioutil.ReadFile(fmt.Sprintf("config/%s", configName))
 		if err != nil {
-			panic(err.Error())
+			//panic(err.Error())
+			logger.Warn(err.Error())
 		}
 		if err = yaml.Unmarshal(bytes, config); err != nil {
-			panic(err.Error())
+			//panic(err.Error())
+			logger.Warn(err.Error())
 		}
 	}
 }
