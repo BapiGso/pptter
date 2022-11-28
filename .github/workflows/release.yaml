@@ -31,9 +31,9 @@ jobs:
         uses: softprops/action-gh-release@v1
         with: # 将下述可执行文件 release 上去
           files: |
-            pptter-windows-amd64.exe
-            pptter-linux-amd64
-            pptter-mac-amd64
-            pptter-windows-arm.exe
-            pptter-linux-arm
-            #pptter-mac-arm
+            pptter_windows_amd64.exe
+            pptter_linux_amd64
+            pptter_mac_amd64
+            pptter_windows_arm.exe
+            pptter_linux_arm
+            #pptter_mac_arm
