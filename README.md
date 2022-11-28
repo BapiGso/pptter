@@ -16,8 +16,10 @@
 | -p    | 80 | 运行端口，默认80 |
 | -tlsp | 443 | tls运行端口，默认443 |
 | -tlsc | "" | tls证书路径 |
-| -tlsk | "" | tls密钥路径 |
-运行
+| -tlsk | "" | tls密钥路径 |  
+
+运行  
+
 ```
   ./pptter -p 8080 -tlsp 8443 -tlsc fullchain.pem -tlsk privkey.pem
 ```
