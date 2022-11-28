@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"pptter/common"
 	"text/template"
 )
 
@@ -40,9 +41,9 @@ func init() {
 }
 
 func main() {
-	domain := flag.String("d", "", "绑定域名，用于自动申请ssl证书，该参数会强制占用80和443端口")
-	port := flag.String("p", "80", "运行端口，默认80")
-	tlsport := flag.String("tlsp", "", "tls运行端口，默认不开启")
+	domain := flag.String("d", config.Config.WEBINFO.Domain, "绑定域名，用于申请ssl证书")
+	port := flag.String("p", config.Config.WEBINFO.WebPort, "运行端口，默认80")
+  tlsport := flag.String("tlsp", "", "tls运行端口，默认不开启")
 	tlscer := flag.String("tlsc", "", "tls证书路径")
 	tlskey := flag.String("tlsk", "", "tls密钥路径")
 	flag.Parse()
@@ -70,8 +71,13 @@ func main() {
 				GetCertificate: certManager.GetCertificate,
 			},
 		}
-		go http.ListenAndServe(":80", certManager.HTTPHandler(nil))
-		server.ListenAndServeTLS("", "")
+
+		go http.ListenAndServe(":"+config.Config.WEBINFO.WebPort, certManager.HTTPHandler(nil))
+		// ssl配置
+		server.ListenAndServeTLS(config.Config.WEBINFO.SslCert, config.Config.WEBINFO.SslKey)
+	} else {
+		http.ListenAndServe(":"+*port, mux)
+
 	}
 	if *tlsport != "" {
 		http.ListenAndServeTLS(":"+*tlsport, *tlscer, *tlskey, mux)
