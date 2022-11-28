@@ -94,4 +94,4 @@ func index(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//TODO 按钮功能 发命令 灯箱bug
+//TODO 按钮功能 发命令 移动端chrome安装

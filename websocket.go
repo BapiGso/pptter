@@ -40,7 +40,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				delete(pptter.GroupUser, ws)
 				break
 			}
-
 			switch messtype {
 			case websocket.TextMessage:
 				pptter.crudtext(message)
@@ -59,7 +58,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	for {
 		msg := <-pptter.SendMessage
 		for client := range pptter.GroupUser {
-			err := client.WriteMessage(websocket.TextMessage, []byte(msg))
+			err := client.WriteMessage(websocket.TextMessage, msg)
 			if err != nil {
 				log.Printf("client.WriteJSON error: %v", err)
 				client.Close()
