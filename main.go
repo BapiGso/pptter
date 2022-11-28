@@ -16,10 +16,7 @@ import (
 
 //go:embed assets
 var assets embed.FS
-
-var (
-	temp, _ = template.ParseFS(assets, "assets/*.html")
-)
+var temp, _ = template.ParseFS(assets, "assets/*.html")
 
 func init() {
 	if _, ok := os.Stat(".tmp"); ok == nil {

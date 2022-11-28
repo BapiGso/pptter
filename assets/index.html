@@ -6,7 +6,7 @@
     <link href="/assets/pptter.webmanifest" rel="manifest">
     <link href="/assets/192.webp" rel="shortcut icon">
     <link href="/assets/css/index.css" rel="stylesheet" type="text/css">
-    <link href="/assets/css/simpleLightbox.css" rel="stylesheet" type="text/css">
+    <link href="/assets/css/venobox.min.css" rel="stylesheet" type="text/css">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta content="开源聊天室，pptter" name="keywords">
     <meta content="pptter是基于GO开发的开源网页聊天室,使用net/http和WebSocket协议通讯,简单易上手"
@@ -102,7 +102,7 @@
             <span class="time">{{.Timestr}}</span>
             <div class="message-content">
                 {{if eq .Filetypecut "image"}}
-                <a href="/.tmp/{{.FileName}}" class="lightbox" title="">
+                <a href="/.tmp/{{.FileName}}" class="venobox" title="">
                     <img src="/.tmp/{{.FileName}}" alt="">
                 </a>
                 {{else if eq .Filetypecut "video"}}
@@ -150,7 +150,7 @@
 </div>
 </body>
 <script src="/assets/js/index.js"></script>
-<script src="/assets/js/simpleLightbox.js"></script>
+<script src="/assets/js/venobox.min.js"></script>
 <script src="/assets/js/crc32.js" async></script>
 <script src="/assets/js/reconnecting-websocket.min.js" type="text/javascript"></script>
 <script>
@@ -169,7 +169,7 @@
                 x.setAttribute("src", "/.tmp/"+json.FileName);
                 var y = document.createElement('a')
                 y.setAttribute("href", "/.tmp/"+json.FileName);
-                y.setAttribute("class", "lightbox");
+                y.setAttribute("class", "venobox");
                 y.append(x)
                 tmp.getElementsByClassName("message-content")[0].innerHTML=""
                 tmp.getElementsByClassName("message-content")[0].appendChild(y)
@@ -199,7 +199,7 @@
         document.getElementsByClassName("message-list")[0].appendChild(tmp)
         playNote(350, context.currentTime + 0.1, 0.2);
         document.getElementsByClassName("tele")[0].scrollTop=document.getElementsByClassName("tele")[0].scrollHeight
-        lightbox('.lightbox', {});
+        new VenoBox({selector: '.venobox'});
     });
 
     var message = {
@@ -258,7 +258,7 @@
     }
     document.getElementsByClassName("tele")[0].scrollTop=document.getElementsByClassName("tele")[0].scrollHeight
 
-
+    new VenoBox({selector: '.venobox'});
 </script>
 <script>
     var btn = document.getElementsByClassName("icon")
