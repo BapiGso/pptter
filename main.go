@@ -40,9 +40,9 @@ func init() {
 func main() {
 	domain := flag.String("d", "", "绑定域名，用于自动申请ssl证书，该参数会强制占用80和443端口")
 	port := flag.String("p", "80", "运行端口，默认80")
-	tlsport := flag.String("tlsp", "", "tls运行端口，默认不开启")
-	tlscer := flag.String("tlsc", "", "tls证书路径")
-	tlskey := flag.String("tlsk", "", "tls密钥路径")
+	sslport := flag.String("tlsp", "", "tls运行端口，默认不开启")
+	sslcer := flag.String("tlsc", "", "tls证书路径")
+	sslkey := flag.String("tlsk", "", "tls密钥路径")
 	flag.Parse()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", index)
@@ -71,8 +71,8 @@ func main() {
 		go log.Fatal(http.ListenAndServe(":80", certManager.HTTPHandler(nil)))
 		log.Fatal(server.ListenAndServeTLS("", ""))
 	}
-	if *tlsport != "" {
-		log.Fatal(http.ListenAndServeTLS(":"+*tlsport, *tlscer, *tlskey, mux))
+	if *sslport != "" {
+		log.Fatal(http.ListenAndServeTLS(":"+*sslport, *sslcer, *sslkey, mux))
 	}
 	log.Fatal(http.ListenAndServe(":"+*port, mux))
 }
