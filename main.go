@@ -41,9 +41,11 @@ func init() {
 
 func main() {
 	go fmt.Scan()
-	domain := flag.String("domain", "", "绑定域名，用于申请ssl证书")
-	usetls := flag.Bool("https", false, "该参数会自动申请证书并占用80和443端口")
-	port := flag.String("port", "80", "运行端口，默认80")
+	domain := flag.String("d", "", "绑定域名，用于申请ssl证书")
+	port := flag.String("p", "80", "运行端口，默认80")
+	tlsport := flag.String("tlsp", "443", "tls运行端口，默认80")
+	tlscer := flag.String("tlsc", "", "tls证书路径")
+	tlskey := flag.String("tlsk", "", "tls密钥路径")
 	flag.Parse()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", index)
@@ -55,7 +57,7 @@ func main() {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 		w.Write(file)
 	})
-	if *usetls {
+	if *domain != "" {
 		certManager := autocert.Manager{
 			Prompt:     autocert.AcceptTOS,
 			Cache:      autocert.DirCache("certs"),
@@ -72,7 +74,8 @@ func main() {
 		go http.ListenAndServe(":80", certManager.HTTPHandler(nil))
 		server.ListenAndServeTLS("", "")
 	} else {
-		http.ListenAndServe(":"+*port, mux)
+		go http.ListenAndServe(":"+*port, mux)
+		http.ListenAndServeTLS(":"+*tlsport, *tlscer, *tlskey, mux)
 	}
 }
 
@@ -86,7 +89,6 @@ func index(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: string(reqbody[:4]), Value: string(reqbody[5:])})
 		http.Redirect(w, r, "/", 302)
 	}
-
 	if _, err := r.Cookie("name"); err != nil {
 		temp.ExecuteTemplate(w, "login.html", nil)
 	} else {
@@ -94,4 +96,4 @@ func index(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-//TODO 按钮功能 灯箱 发命令
+//TODO 按钮功能 发命令

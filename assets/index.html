@@ -6,6 +6,7 @@
     <link href="/assets/pptter.webmanifest" rel="manifest">
     <link href="/assets/192.webp" rel="shortcut icon">
     <link href="/assets/css/index.css" rel="stylesheet" type="text/css">
+    <link href="/assets/css/simpleLightbox.css" rel="stylesheet" type="text/css">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta content="开源聊天室，pptter" name="keywords">
     <meta content="pptter是基于GO开发的开源网页聊天室,使用net/http和WebSocket协议通讯,简单易上手"
@@ -101,7 +102,9 @@
             <span class="time">{{.Timestr}}</span>
             <div class="message-content">
                 {{if eq .Filetypecut "image"}}
-                    <img src="/.tmp/{{.FileName}}">
+                <a href="/.tmp/{{.FileName}}" class="lightbox" title="">
+                    <img src="/.tmp/{{.FileName}}" alt="">
+                </a>
                 {{else if eq .Filetypecut "video"}}
                     <video controls="controls" src="/.tmp/{{.FileName}}"></video>
                 {{else if eq .Filetype ""}}
@@ -147,7 +150,8 @@
 </div>
 </body>
 <script src="/assets/js/index.js"></script>
-<script src="/assets/js/crc32.js"></script>
+<script src="/assets/js/simpleLightbox.js"></script>
+<script src="/assets/js/crc32.js" async></script>
 <script src="/assets/js/reconnecting-websocket.min.js" type="text/javascript"></script>
 <script>
     const socket = new ReconnectingWebSocket(((window.location.protocol === "https:") ? "wss://" : "ws://") + window.location.host + "/ws");
@@ -163,8 +167,13 @@
             if(json.Filetype.startsWith("image")){
                 var x = document.createElement('img')
                 x.setAttribute("src", "/.tmp/"+json.FileName);
+                var y = document.createElement('a')
+                y.setAttribute("href", "/.tmp/"+json.FileName);
+                y.setAttribute("class", "lightbox");
+                y.append(x)
                 tmp.getElementsByClassName("message-content")[0].innerHTML=""
-                tmp.getElementsByClassName("message-content")[0].appendChild(x)
+                tmp.getElementsByClassName("message-content")[0].appendChild(y)
+
             }
             else if(json.Filetype.startsWith("video")){
                 var x = document.createElement('video')
@@ -190,6 +199,7 @@
         document.getElementsByClassName("message-list")[0].appendChild(tmp)
         playNote(350, context.currentTime + 0.1, 0.2);
         document.getElementsByClassName("tele")[0].scrollTop=document.getElementsByClassName("tele")[0].scrollHeight
+        lightbox('.lightbox', {});
     });
 
     var message = {
