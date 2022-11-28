@@ -19,7 +19,7 @@ jobs:
       - run: CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -o pptter_mac_amd64
       - run: CGO_ENABLED=0 GOOS=linux GOARCH=arm go build -o pptter_linux_arm
       - run: CGO_ENABLED=0 GOOS=windows GOARCH=arm go build -o pptter_windows_arm.exe
-      #- run: CGO_ENABLED=0 GOOS=darwin GOARCH=arm go build -o pptter_mac_arm
+      - run: CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o pptter_mac_arm
       #- run: zip pptter-windows-amd64.zip pptter_windows_amd64.exe key.key crt.crt
       #- run: zip pptter-linux-amd64.zip pptter_linux_amd64 key.key crt.crt
       #- run: zip pptter-mac-amd64.zip pptter_mac_amd64 key.key crt.crt
@@ -36,4 +36,4 @@ jobs:
             pptter_mac_amd64
             pptter_windows_arm.exe
             pptter_linux_arm
-            #pptter_mac_arm
+            pptter_mac_arm

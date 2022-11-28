@@ -5,3 +5,13 @@ function emojiButtonList(t,l){function A(a){a="&#"+a+";";var e=w("div");e.innerH
     return v[a].cloneNode(!1)}function z(a){var e=null;h(a)&&(r.hasOwnProperty(a)&&null!==r[a]||(r[a]=k.getElementById(a)),e=r[a]);return e}function x(a){return null!==b&&h(b[a])&&"function"===typeof b[a]}function h(a){return void 0!==a&&null!==a&&""!==a}var b={},r={},v={},k=null,q=null,D=this,n=null,c=null,f=null;this.setOptions=function(a){b=null!==a&&"object"===typeof a?a:{};h(b.emojiRangesToShow)||(b.emojiRangesToShow=[[128513,128591],[9986,10160],[128640,128704]]);h(b.dropDownXAlign)||(b.dropDownXAlign=
     "left");h(b.dropDownYAlign)||(b.dropDownYAlign="bottom");h(b.textBoxID)||(b.textBoxID=null);h(b.xAlignMargin)||(b.xAlignMargin=0);h(b.yAlignMargin)||(b.yAlignMargin=0)};(function(a,e){l=h(l)?l:{};k=a;q=e;D.setOptions(l);n=z(t);c=z(b.textBoxID);f=document.createElement("div");f.className="emoji-drop-down custom-scroll-bars";f.style.display="none";k.body.appendChild(f);for(var d=b.emojiRangesToShow.length,g=0;g<d;g++)for(var m=b.emojiRangesToShow[g],p=m[0];p<m[1];p++)A(p);k.body.addEventListener("click",
     y);q.addEventListener("resize",y);n.addEventListener("click",C)})(document,window)};
+var margin = 10,
+    instance1 = new emojiButtonList( "emoji", {
+        dropDownXAlign: "left",
+        textBoxID: "inputext",
+        yAlignMargin: margin,
+        xAlignMargin: margin
+    } );
+function emojiClickEvent( emojiText ) {
+    document.title += " " + emojiText;
+}

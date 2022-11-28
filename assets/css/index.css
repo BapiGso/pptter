@@ -2,6 +2,7 @@ html {
     height: 100%;
 }
 
+
 body {
     height: 100%;
     display: grid;
@@ -12,15 +13,86 @@ body {
     overflow: hidden;
 }
 
-    svg:hover{
-        stroke: rgb(85, 227, 189);
-    }
+#seldomlayout {
+    grid-area: 1/1/21/37;
+    display: grid;
+    grid-template-columns: repeat(36, 1fr);
+    grid-template-rows: repeat(20, 1fr);
+    z-index: 1;
+    pointer-events: none;
+    display: none;
+}
 
-.shadow {
+#info,
+#notification{
+    grid-area: 2/10/4/26;
+    display: flex;
+    background-color: #fff;
+    opacity: 1;
+    transition-duration: .75s;
+    transition-property: opacity;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgb(0 0 0 / 50%);
+    align-items: center;
+    justify-content: center;
+}
+
+#info{
+    display: none;
+    grid-area: 8/13/12/23;
+}
+
+
+#shadow {
     grid-area: 3 / 8 / 19 / 30;
     border-radius: 10px;
-    box-shadow: 0px 0px 60px rgb(0 0 0 / 50%);
+    box-shadow: 0 0 60px rgb(0 0 0 / 50%);
 }
+
+#emojibox{
+    grid-area: 13/14/18/20;
+    background-color: #9b9b9b;
+    display: grid;
+    grid-template-areas:
+    "a a a a"
+    "a a a a"
+    "a a a a"
+    "w x y z";
+    column-gap: 2%;
+    align-items: center;
+    justify-items: center;
+}
+
+#emojibox .content{
+    width:100%;
+    height: 100%;
+    margin: 10px;
+    border-radius: 10px;
+    grid-area: a;
+    background-color: white;
+}
+
+#emojibox .emojis{
+    height: 100%;
+    grid-area: w;
+    background-color: white;
+}
+
+#emojibox .huaji{
+    grid-area: x;
+    background-color: white;
+}
+
+#emojibox .setu{
+    grid-area: y;
+    background-color: white;
+}
+
+#emojibox .beiyong{
+    grid-area: z;
+    background-color: white;
+}
+
 
 .sidebar {
     grid-area: 3 / 8 / 19 / 9;
@@ -164,7 +236,12 @@ h3 span {
     grid-area: 18 / 14 / 19 / 30;
     background-color: rgb(255 255 255 / 80%);
     border-bottom-right-radius: 10px;
+
     backdrop-filter: blur(6px);
+}
+
+.icon-tabler-file-upload{
+    display: none;
 }
 
 .inputarea form {
@@ -262,33 +339,19 @@ h3 span {
     margin-right: 1%;
 }
 
-#info,
-#notification{
-    grid-area: 2/10/3/26;
-    display: flex;
-    background-color: #fff;
-    opacity: 1;
-    transition-duration: .75s;
-    transition-property: opacity;
-    border-radius: 10px;
-    box-shadow: 0px 0px 10px rgb(0 0 0 / 50%);
-    z-index: 100;
-    align-items: center;
-    justify-content: center;
-}
 
-#info{
-    display: none;
-    grid-area: 8/13/12/23;
-}
 
 .avatar{
     pointer-events:none;
 }
 
+.icon:hover{
+    stroke: rgb(85, 227, 189);
+}
+
 
 @media screen and (max-width: 780px) {
-    .shadow{
+    #shadow{
         display: none;
     }
 
@@ -319,5 +382,9 @@ h3 span {
     .inputarea {
         grid-area: 19 / 1 / 21 / 37;
         border-radius: 0;
+    }
+    
+    .icon-tabler-file-upload{
+        display: block;
     }
 }
