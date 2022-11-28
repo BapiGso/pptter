@@ -40,10 +40,9 @@ func init() {
 }
 
 func main() {
-	go fmt.Scan()
-	domain := flag.String("d", "", "绑定域名，用于申请ssl证书，该参数会强制占用80和443端口")
+	domain := flag.String("d", "", "绑定域名，用于自动申请ssl证书，该参数会强制占用80和443端口")
 	port := flag.String("p", "80", "运行端口，默认80")
-	tlsport := flag.String("tlsp", "443", "tls运行端口，默认443")
+	tlsport := flag.String("tlsp", "", "tls运行端口，默认不开启")
 	tlscer := flag.String("tlsc", "", "tls证书路径")
 	tlskey := flag.String("tlsk", "", "tls密钥路径")
 	flag.Parse()
@@ -55,6 +54,7 @@ func main() {
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
 		file, _ := assets.ReadFile("assets/js/sw.js")
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		//goland:noinspection GoUnhandledErrorResult
 		w.Write(file)
 	})
 	if *domain != "" {
@@ -63,7 +63,6 @@ func main() {
 			Cache:      autocert.DirCache("certs"),
 			HostPolicy: autocert.HostWhitelist("example.com", *domain),
 		}
-
 		server := &http.Server{
 			Addr:    ":443",
 			Handler: mux,
@@ -73,15 +72,16 @@ func main() {
 		}
 		go http.ListenAndServe(":80", certManager.HTTPHandler(nil))
 		server.ListenAndServeTLS("", "")
-	} else {
-		go http.ListenAndServe(":"+*port, mux)
+	}
+	if *tlsport != "" {
 		http.ListenAndServeTLS(":"+*tlsport, *tlscer, *tlskey, mux)
 	}
+	http.ListenAndServe(":"+*port, mux)
 }
 
 func index(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
-		http.Error(w, "success but not found", 204)
+		http.NotFoundHandler()
 		return
 	}
 	if r.Method == "POST" {
