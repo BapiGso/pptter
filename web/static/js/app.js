@@ -36,7 +36,6 @@
     threads: { group: [] },
     unread: {},
     active: GROUP,
-    search: "",
     muted: false,
     socket: null,
     identityKeyPair: null,
@@ -56,7 +55,6 @@
 
   function start() {
     dom.convoList = document.getElementById("convo-list");
-    dom.search = document.getElementById("search");
     dom.convoTitle = document.getElementById("convo-title");
     dom.statusDot = document.getElementById("status-dot");
     dom.statusText = document.getElementById("status-text");
@@ -82,7 +80,6 @@
     dom.lightboxImg = document.getElementById("lightbox-img");
 
     dom.form.addEventListener("submit", (e) => { e.preventDefault(); void sendText(); });
-    dom.search.addEventListener("input", () => { state.search = dom.search.value; renderConversations(); });
     dom.reconnect.addEventListener("click", () => { void reconnect(); });
     dom.btnImage.addEventListener("click", () => { if (canSend()) dom.fileInput.click(); });
     dom.fileInput.addEventListener("change", () => {
@@ -483,14 +480,6 @@
     return state.active === GROUP ? "群聊「" + state.room + "」" : shortID(state.active) + " · 私聊";
   }
 
-  function filteredPeers() {
-    const q = state.search.trim().toLowerCase();
-    if (!q) {
-      return state.peers;
-    }
-    return state.peers.filter((p) => shortID(p.id).toLowerCase().includes(q));
-  }
-
   function threadPreview(key) {
     const list = state.threads[key] || [];
     for (let i = list.length - 1; i >= 0; i -= 1) {
@@ -553,7 +542,7 @@
       dom.statusText.textContent = text;
     }
     if (dom.statusDot) {
-      dom.statusDot.className = "inline-block size-2 rounded-full " +
+      dom.statusDot.className = "status-dot " +
         (tone === "ok" ? "bg-success" : tone === "bad" ? "bg-error" : "bg-warning");
     }
     updateSendable();
@@ -582,8 +571,7 @@
 
   function avatarEl(id, initials, big) {
     const el = document.createElement("span");
-    el.className = (big ? "size-11" : "size-9") +
-      " grid shrink-0 place-items-center rounded-full text-xs font-extrabold uppercase text-white select-none";
+    el.className = "avatar-chip" + (big ? " avatar-chip-lg" : "");
     el.textContent = initials;
     const hue = colorHue(id || "");
     el.style.background = "linear-gradient(135deg, hsl(" + hue + " 70% 38%), hsl(" + ((hue + 36) % 360) + " 78% 50%))";
@@ -591,15 +579,17 @@
   }
 
   function convoButton(opts) {
+    const item = document.createElement("li");
+    item.className = "convo-entry";
+
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "flex items-center gap-3 px-3.5 py-2.5 text-left text-white shrink-0 w-60 md:w-auto hover:bg-white/10" +
-      (opts.active ? " bg-white/20" : "");
+    btn.className = "convo-button" + (opts.active ? " is-active" : "");
     btn.addEventListener("click", opts.onClick);
 
     if (opts.groupBadge) {
       const g = document.createElement("span");
-      g.className = "size-11 grid shrink-0 place-items-center rounded-full bg-white/25 text-white font-extrabold";
+      g.className = "convo-avatar";
       g.textContent = "群";
       btn.appendChild(g);
     } else {
@@ -607,11 +597,11 @@
     }
 
     const body = document.createElement("span");
-    body.className = "min-w-0 flex-1";
+    body.className = "convo-body";
     const top = document.createElement("span");
-    top.className = "flex items-center justify-between gap-2";
+    top.className = "convo-row";
     const name = document.createElement("strong");
-    name.className = "text-sm truncate";
+    name.className = "convo-name";
     name.textContent = opts.title;
     top.appendChild(name);
     if (opts.unread > 0) {
@@ -621,12 +611,13 @@
       top.appendChild(badge);
     }
     const preview = document.createElement("small");
-    preview.className = "block text-xs text-white/60 truncate";
+    preview.className = "convo-preview";
     preview.textContent = opts.preview;
     body.appendChild(top);
     body.appendChild(preview);
     btn.appendChild(body);
-    return btn;
+    item.appendChild(btn);
+    return item;
   }
 
   function renderConversations() {
@@ -644,7 +635,7 @@
       onClick: () => selectConversation(GROUP),
     }));
 
-    for (const peer of filteredPeers()) {
+    for (const peer of state.peers) {
       dom.convoList.appendChild(convoButton({
         id: peer.id,
         initials: shortID(peer.id).slice(0, 2),
@@ -657,9 +648,12 @@
     }
 
     if (state.peers.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "px-3.5 py-2 text-xs text-white/70 shrink-0";
-      empty.textContent = "还没有其他成员在线";
+      const empty = document.createElement("li");
+      empty.className = "convo-entry";
+      const label = document.createElement("span");
+      label.className = "convo-empty";
+      label.textContent = "还没有其他成员在线";
+      empty.appendChild(label);
       dom.convoList.appendChild(empty);
     }
   }
@@ -668,9 +662,9 @@
     const wrap = document.createElement("div");
     if (message.system) {
       const center = document.createElement("div");
-      center.className = "flex justify-center my-2";
+      center.className = "system-message";
       const badge = document.createElement("span");
-      badge.className = "badge badge-ghost badge-sm max-w-[85%] h-auto py-1 whitespace-normal text-center text-base-content/70";
+      badge.className = "badge badge-ghost badge-sm system-badge";
       badge.textContent = message.text;
       center.appendChild(badge);
       wrap.appendChild(center);
@@ -685,7 +679,7 @@
     image.appendChild(avatarEl(message.from, shortID(message.from).slice(0, 2), false));
 
     const head = document.createElement("div");
-    head.className = "chat-header text-xs opacity-80 gap-1";
+    head.className = "chat-header message-header";
     const author = document.createElement("span");
     author.textContent = message.author;
     const time = document.createElement("time");
@@ -698,13 +692,13 @@
     bubble.className = "chat-bubble" + (message.fromSelf ? " chat-bubble-accent" : "");
     if (message.kind === "image") {
       const img = document.createElement("img");
-      img.className = "rounded-lg max-w-[min(70vw,18rem)] max-h-[18rem] h-auto w-auto cursor-zoom-in";
+      img.className = "message-image";
       img.alt = "图片";
       img.loading = "lazy";
       const src = "data:" + message.mime + ";base64," + message.data;
       img.src = src;
       img.addEventListener("click", () => openLightbox(src));
-      bubble.classList.add("p-1", "max-w-full");
+      bubble.classList.add("message-image-bubble");
       bubble.appendChild(img);
     } else {
       bubble.textContent = message.text;

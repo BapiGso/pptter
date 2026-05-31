@@ -103,6 +103,279 @@ body {
     linear-gradient(135deg, #d8fff7 0%, #eef7ff 44%, #f7eefc 100%);
 }
 
+@layer components {
+  .app-shell {
+    @apply min-h-screen w-full grid place-items-center p-0;
+  }
+
+  .app-frame {
+    @apply flex flex-col w-full h-screen overflow-hidden;
+  }
+
+  .icon-sidebar {
+    @apply hidden w-16 flex-col items-center gap-3 py-4 shrink-0;
+    background: rgb(5 159 149 / 0.82);
+    backdrop-filter: blur(10px);
+  }
+
+  .sidebar-action {
+    @apply text-white;
+  }
+
+  .profile-action {
+    @apply p-0;
+  }
+
+  .sidebar-spacer {
+    @apply flex-1;
+  }
+
+  .self-avatar,
+  .avatar-chip {
+    @apply size-9 grid shrink-0 place-items-center rounded-full text-xs font-extrabold uppercase text-white select-none;
+  }
+
+  .self-avatar {
+    @apply bg-white/30;
+  }
+
+  .avatar-chip-lg {
+    @apply size-11;
+  }
+
+  .convo-panel {
+    @apply w-full flex flex-col shrink-0;
+    max-height: 10rem;
+    background: rgb(5 159 149 / 0.5);
+    backdrop-filter: blur(10px);
+  }
+
+  .convo-heading {
+    @apply px-3 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-white/70;
+  }
+
+  .convo-list {
+    @apply flex flex-row overflow-x-auto gap-px p-1;
+  }
+
+  .convo-entry {
+    @apply shrink-0;
+  }
+
+  .convo-button {
+    @apply w-60 flex items-center gap-3 px-3.5 py-2.5 text-left text-white rounded-xl;
+  }
+
+  .convo-button:hover {
+    background: rgb(255 255 255 / 0.1);
+  }
+
+  .convo-button.is-active {
+    background: rgb(255 255 255 / 0.2);
+  }
+
+  .convo-avatar {
+    @apply size-11 grid shrink-0 place-items-center rounded-full bg-white/25 text-white font-extrabold;
+  }
+
+  .convo-body {
+    @apply min-w-0 flex-1;
+  }
+
+  .convo-row {
+    @apply flex items-center justify-between gap-2;
+  }
+
+  .convo-name {
+    @apply text-sm truncate;
+  }
+
+  .convo-preview {
+    @apply block text-xs text-white/60 truncate;
+  }
+
+  .convo-empty {
+    @apply px-3.5 py-2 text-xs text-white/70 shrink-0;
+  }
+
+  .chat-main {
+    @apply flex-1 flex flex-col min-w-0;
+    background: rgb(241 241 241 / 0.68);
+    backdrop-filter: blur(10px);
+  }
+
+  .chat-topbar {
+    @apply flex items-center justify-between gap-3 px-4 h-16 border-b border-base-300/60 shrink-0;
+    background: rgb(241 241 241 / 0.68);
+    backdrop-filter: blur(10px);
+  }
+
+  .chat-title-wrap {
+    @apply min-w-0;
+  }
+
+  .chat-title {
+    @apply text-base font-semibold truncate m-0;
+  }
+
+  .status-line {
+    @apply text-xs m-0 flex items-center gap-1.5;
+  }
+
+  .status-dot {
+    @apply inline-block size-2 rounded-full;
+  }
+
+  .status-text {
+    @apply text-base-content/60;
+  }
+
+  .theme-button {
+    @apply shrink-0;
+  }
+
+  .messages-pane {
+    @apply flex-1 overflow-auto p-4;
+    background: rgb(241 241 241 / 0.68);
+    backdrop-filter: blur(10px);
+  }
+
+  .composer {
+    @apply flex items-center gap-2 px-3 py-3 border-t border-base-300/60 shrink-0;
+    background: rgb(255 255 255 / 0.82);
+  }
+
+  .composer-icon-btn {
+    @apply text-primary shrink-0;
+  }
+
+  .composer-input {
+    @apply flex-1 min-w-0;
+  }
+
+  .composer-send {
+    @apply font-extrabold;
+  }
+
+  .system-message {
+    @apply flex justify-center my-2;
+  }
+
+  .system-badge {
+    @apply h-auto py-1 whitespace-normal text-center text-base-content/70;
+    max-width: 85%;
+  }
+
+  .message-header {
+    @apply text-xs opacity-80 gap-1;
+  }
+
+  .message-image-bubble {
+    @apply overflow-hidden max-w-full p-1;
+  }
+
+  .message-image {
+    @apply block rounded-lg max-h-[18rem] h-auto w-auto cursor-zoom-in;
+    max-width: min(70vw, 18rem);
+  }
+
+  .modal-backdrop {
+    @apply fixed inset-0 grid place-items-center bg-black/40 p-4;
+    z-index: 80;
+  }
+
+  .settings-card {
+    @apply bg-base-100 text-base-content w-full max-w-sm shadow-2xl;
+  }
+
+  .settings-body {
+    @apply gap-4;
+  }
+
+  .settings-head {
+    @apply flex items-center justify-between;
+  }
+
+  .settings-title {
+    @apply text-lg font-bold m-0;
+  }
+
+  .settings-label {
+    @apply flex items-center justify-between gap-3 cursor-pointer;
+  }
+
+  .settings-stack {
+    @apply flex flex-col gap-2;
+  }
+
+  .settings-row {
+    @apply flex gap-2;
+  }
+
+  .settings-file {
+    @apply flex-1;
+  }
+
+  .lightbox {
+    @apply fixed inset-0 grid place-items-center bg-black/85 p-4 cursor-zoom-out;
+    z-index: 90;
+  }
+
+  .lightbox-image {
+    @apply rounded-lg;
+    max-width: 92vw;
+    max-height: 92vh;
+  }
+
+  .toast-layer {
+    @apply z-50;
+  }
+
+  @media (min-width: 40rem) {
+    .chat-topbar {
+      @apply px-5;
+    }
+
+    .messages-pane {
+      @apply p-5;
+    }
+
+    .composer {
+      @apply gap-3 px-4;
+    }
+  }
+
+  @media (min-width: 48rem) {
+    .app-shell {
+      @apply p-6;
+    }
+
+    .app-frame {
+      @apply flex-row max-w-6xl rounded-2xl shadow-2xl;
+      height: min(88vh, 52rem);
+    }
+
+    .icon-sidebar {
+      @apply flex;
+    }
+
+    .convo-panel {
+      width: 18rem;
+      max-height: none;
+    }
+
+    .convo-list {
+      @apply flex-col overflow-y-auto flex-1;
+      overflow-x: hidden;
+    }
+
+    .convo-entry,
+    .convo-button {
+      @apply w-full;
+    }
+  }
+}
+
 @layer utilities {
   /* 半透明磨砂面板：青绿侧栏与群组栏。 */
   .glass-teal {
@@ -156,6 +429,12 @@ body {
 }
 
 [data-theme="pptter-dark"] .glass-light {
+  background: rgb(20 26 30 / 0.62);
+}
+
+[data-theme="pptter-dark"] .chat-main,
+[data-theme="pptter-dark"] .chat-topbar,
+[data-theme="pptter-dark"] .messages-pane {
   background: rgb(20 26 30 / 0.62);
 }
 
