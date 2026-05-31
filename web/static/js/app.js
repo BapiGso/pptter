@@ -36,6 +36,7 @@
     threads: { group: [] },
     unread: {},
     active: GROUP,
+    search: "",
     muted: false,
     socket: null,
     identityKeyPair: null,
@@ -52,9 +53,11 @@
   const dom = {};
   let toastTimer = 0;
   let audioCtx = null;
+  let avatarSpriteURL = "";
 
   function start() {
     dom.convoList = document.getElementById("convo-list");
+    dom.search = document.getElementById("search");
     dom.convoTitle = document.getElementById("convo-title");
     dom.statusDot = document.getElementById("status-dot");
     dom.statusText = document.getElementById("status-text");
@@ -80,6 +83,7 @@
     dom.lightboxImg = document.getElementById("lightbox-img");
 
     dom.form.addEventListener("submit", (e) => { e.preventDefault(); void sendText(); });
+    dom.search.addEventListener("input", () => { state.search = dom.search.value; renderConversations(); });
     dom.reconnect.addEventListener("click", () => { void reconnect(); });
     dom.btnImage.addEventListener("click", () => { if (canSend()) dom.fileInput.click(); });
     dom.fileInput.addEventListener("change", () => {
@@ -120,6 +124,7 @@
     dom.lightbox.addEventListener("click", closeLightbox);
 
     initSettings();
+    detectAvatarSprite();
     renderConversations();
     renderHeader();
     void init();
@@ -480,6 +485,14 @@
     return state.active === GROUP ? "群聊「" + state.room + "」" : shortID(state.active) + " · 私聊";
   }
 
+  function filteredPeers() {
+    const q = state.search.trim().toLowerCase();
+    if (!q) {
+      return state.peers;
+    }
+    return state.peers.filter((p) => shortID(p.id).toLowerCase().includes(q));
+  }
+
   function threadPreview(key) {
     const list = state.threads[key] || [];
     for (let i = list.length - 1; i >= 0; i -= 1) {
@@ -542,7 +555,7 @@
       dom.statusText.textContent = text;
     }
     if (dom.statusDot) {
-      dom.statusDot.className = "status-dot " +
+      dom.statusDot.className = "inline-block size-2 rounded-full " +
         (tone === "ok" ? "bg-success" : tone === "bad" ? "bg-error" : "bg-warning");
     }
     updateSendable();
@@ -571,25 +584,25 @@
 
   function avatarEl(id, initials, big) {
     const el = document.createElement("span");
-    el.className = "avatar-chip" + (big ? " avatar-chip-lg" : "");
+    el.className = (big ? "size-11" : "size-9") +
+      " grid shrink-0 place-items-center rounded-full text-xs font-extrabold uppercase text-white select-none";
     el.textContent = initials;
     const hue = colorHue(id || "");
     el.style.background = "linear-gradient(135deg, hsl(" + hue + " 70% 38%), hsl(" + ((hue + 36) % 360) + " 78% 50%))";
+    applyAvatarSprite(el, id || "");
     return el;
   }
 
   function convoButton(opts) {
-    const item = document.createElement("li");
-    item.className = "convo-entry";
-
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "convo-button" + (opts.active ? " is-active" : "");
+    btn.className = "flex items-center gap-3 px-3.5 py-2.5 text-left text-white shrink-0 w-60 md:w-auto hover:bg-white/10" +
+      (opts.active ? " bg-white/20" : "");
     btn.addEventListener("click", opts.onClick);
 
     if (opts.groupBadge) {
       const g = document.createElement("span");
-      g.className = "convo-avatar";
+      g.className = "size-11 grid shrink-0 place-items-center rounded-full bg-white/25 text-white font-extrabold";
       g.textContent = "群";
       btn.appendChild(g);
     } else {
@@ -597,11 +610,11 @@
     }
 
     const body = document.createElement("span");
-    body.className = "convo-body";
+    body.className = "min-w-0 flex-1";
     const top = document.createElement("span");
-    top.className = "convo-row";
+    top.className = "flex items-center justify-between gap-2";
     const name = document.createElement("strong");
-    name.className = "convo-name";
+    name.className = "text-sm truncate";
     name.textContent = opts.title;
     top.appendChild(name);
     if (opts.unread > 0) {
@@ -611,13 +624,12 @@
       top.appendChild(badge);
     }
     const preview = document.createElement("small");
-    preview.className = "convo-preview";
+    preview.className = "block text-xs text-white/60 truncate";
     preview.textContent = opts.preview;
     body.appendChild(top);
     body.appendChild(preview);
     btn.appendChild(body);
-    item.appendChild(btn);
-    return item;
+    return btn;
   }
 
   function renderConversations() {
@@ -635,7 +647,7 @@
       onClick: () => selectConversation(GROUP),
     }));
 
-    for (const peer of state.peers) {
+    for (const peer of filteredPeers()) {
       dom.convoList.appendChild(convoButton({
         id: peer.id,
         initials: shortID(peer.id).slice(0, 2),
@@ -648,12 +660,9 @@
     }
 
     if (state.peers.length === 0) {
-      const empty = document.createElement("li");
-      empty.className = "convo-entry";
-      const label = document.createElement("span");
-      label.className = "convo-empty";
-      label.textContent = "还没有其他成员在线";
-      empty.appendChild(label);
+      const empty = document.createElement("div");
+      empty.className = "px-3.5 py-2 text-xs text-white/70 shrink-0";
+      empty.textContent = "还没有其他成员在线";
       dom.convoList.appendChild(empty);
     }
   }
@@ -662,9 +671,9 @@
     const wrap = document.createElement("div");
     if (message.system) {
       const center = document.createElement("div");
-      center.className = "system-message";
+      center.className = "flex justify-center my-2";
       const badge = document.createElement("span");
-      badge.className = "badge badge-ghost badge-sm system-badge";
+      badge.className = "badge badge-ghost badge-sm max-w-[85%] h-auto py-1 whitespace-normal text-center text-base-content/70";
       badge.textContent = message.text;
       center.appendChild(badge);
       wrap.appendChild(center);
@@ -679,7 +688,7 @@
     image.appendChild(avatarEl(message.from, shortID(message.from).slice(0, 2), false));
 
     const head = document.createElement("div");
-    head.className = "chat-header message-header";
+    head.className = "chat-header text-xs opacity-80 gap-1";
     const author = document.createElement("span");
     author.textContent = message.author;
     const time = document.createElement("time");
@@ -692,13 +701,13 @@
     bubble.className = "chat-bubble" + (message.fromSelf ? " chat-bubble-accent" : "");
     if (message.kind === "image") {
       const img = document.createElement("img");
-      img.className = "message-image";
+      img.className = "rounded-lg max-w-[min(70vw,18rem)] max-h-[18rem] h-auto w-auto cursor-zoom-in";
       img.alt = "图片";
       img.loading = "lazy";
       const src = "data:" + message.mime + ";base64," + message.data;
       img.src = src;
       img.addEventListener("click", () => openLightbox(src));
-      bubble.classList.add("message-image-bubble");
+      bubble.classList.add("p-1", "max-w-full");
       bubble.appendChild(img);
     } else {
       bubble.textContent = message.text;
@@ -911,6 +920,7 @@
     dom.selfAvatar.textContent = shortID(state.self.id).slice(0, 2);
     const hue = colorHue(state.self.id);
     dom.selfAvatar.style.background = "linear-gradient(135deg, hsl(" + hue + " 70% 38%), hsl(" + ((hue + 36) % 360) + " 78% 50%))";
+    applyAvatarSprite(dom.selfAvatar, state.self.id);
   }
 
   // ---- 加密原语 ----
@@ -1009,6 +1019,50 @@
       hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
     }
     return hash % 360;
+  }
+
+  // 头像精灵图：10×10 网格、100 个原创二次元头像。优先 AVIF，浏览器不支持时回退 PNG。
+  // 用 1px AVIF 探测解码能力，成功后切到 .avif 并重渲染已有头像。
+  const AVIF_PROBE = "data:image/avif;base64,AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUIAAADybWV0YQAAAAAAAAAoaGRscgAAAAAAAAAAcGljdAAAAAAAAAAAAAAAAGxpYmF2aWYAAAAADnBpdG0AAAAAAAEAAAAeaWxvYwAAAABEAAABAAEAAAABAAABGgAAAB0AAAAoaWluZgAAAAAAAQAAABppbmZlAgAAAAABAABhdjAxQ29sb3IAAAAAamlwcnAAAABLaXBjbwAAABRpc3BlAAAAAAAAAAEAAAABAAAAEHBpeGkAAAAAAwgICAAAAAxhdjFDgQ0MAAAAABNjb2xybmNseAACAAIABoAAAAAXaXBtYQAAAAAAAAABAAEEAQKDBAAAACVtZGF0EgAKCBgABogQEDQgMgkQAAAAB8dSLfI=";
+
+  function detectAvatarSprite() {
+    const probe = new Image();
+    probe.onload = () => {
+      avatarSpriteURL = probe.width > 0 ? "/static/img/avatar.avif" : "/static/img/avatar.png";
+      reapplyAvatarSprites();
+    };
+    probe.onerror = () => {
+      avatarSpriteURL = "/static/img/avatar.png";
+      reapplyAvatarSprites();
+    };
+    probe.src = AVIF_PROBE;
+  }
+
+  function reapplyAvatarSprites() {
+    renderConversations();
+    renderSelfAvatar();
+  }
+
+  function avatarIndex(id) {
+    let hash = 0;
+    for (let i = 0; i < id.length; i += 1) {
+      hash = (hash * 131 + id.charCodeAt(i)) >>> 0;
+    }
+    return hash % 100;
+  }
+
+  function applyAvatarSprite(el, id) {
+    if (!avatarSpriteURL || !el) {
+      return;
+    }
+    const idx = avatarIndex(id);
+    const col = idx % 10;
+    const row = Math.floor(idx / 10);
+    el.textContent = "";
+    el.style.backgroundImage = "url(" + avatarSpriteURL + ")";
+    el.style.backgroundSize = "1000% 1000%";
+    el.style.backgroundRepeat = "no-repeat";
+    el.style.backgroundPosition = (col / 9 * 100) + "% " + (row / 9 * 100) + "%";
   }
 
   function formatTime(date) {

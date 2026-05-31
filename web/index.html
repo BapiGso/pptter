@@ -9,16 +9,16 @@
   <script defer src="/static/js/app.js"></script>
 </head>
 <body>
-  <div class="app-shell">
-    <div class="app-frame">
+  <div class="min-h-screen w-full grid place-items-center p-0 md:p-6">
+    <div class="flex flex-col md:flex-row w-full md:max-w-6xl h-screen md:h-[min(88vh,52rem)] overflow-hidden md:rounded-2xl md:shadow-2xl">
 
       <!-- 图标侧栏 -->
-      <aside class="icon-sidebar">
-        <button id="btn-profile" class="btn btn-circle btn-ghost sidebar-action profile-action" type="button" title="我的设置">
-          <span id="self-avatar" class="self-avatar">我</span>
+      <aside class="hidden md:flex glass-teal-strong w-16 flex-col items-center gap-3 py-4 shrink-0">
+        <button id="btn-profile" class="btn btn-circle btn-ghost p-0" type="button" title="我的设置">
+          <span id="self-avatar" class="size-9 grid place-items-center rounded-full text-xs font-extrabold uppercase text-white bg-white/30 select-none">我</span>
         </button>
-        <div class="sidebar-spacer"></div>
-        <button id="btn-reconnect" class="btn btn-circle btn-ghost sidebar-action" type="button" title="重新连接（重置身份）">
+        <div class="flex-1"></div>
+        <button id="btn-reconnect" class="btn btn-circle btn-ghost text-white" type="button" title="重新连接（重置身份）">
           <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"></path><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"></path>
           </svg>
@@ -26,39 +26,41 @@
       </aside>
 
       <!-- 会话列表：群聊 + 联系人（常驻） -->
-      <section class="convo-panel">
-        <div class="convo-heading">会话与成员</div>
-        <ul id="convo-list" class="menu convo-list scroll-thin"></ul>
+      <section class="glass-teal w-full md:w-72 flex flex-col shrink-0 max-h-40 md:max-h-none">
+        <div class="p-3">
+          <input id="search" class="input input-sm w-full glass-input" placeholder="搜索成员" autocomplete="off" spellcheck="false">
+        </div>
+        <div id="convo-list" class="flex md:flex-col flex-row overflow-x-auto md:overflow-y-auto scroll-thin md:flex-1 gap-px pb-1"></div>
       </section>
 
       <!-- 聊天主区 -->
-      <main class="chat-main">
-        <header class="navbar chat-topbar">
-          <div class="chat-title-wrap">
-            <h1 id="convo-title" class="chat-title">群聊</h1>
-            <p class="status-line">
-              <span id="status-dot" class="status-dot bg-warning"></span>
-              <span id="status-text" class="status-text">初始化</span>
+      <main class="glass-light flex-1 flex flex-col min-w-0">
+        <header class="flex items-center justify-between gap-3 px-4 sm:px-5 h-16 border-b border-base-300/60 glass-light shrink-0">
+          <div class="min-w-0">
+            <h1 id="convo-title" class="text-base font-semibold truncate m-0">群聊</h1>
+            <p class="text-xs m-0 flex items-center gap-1.5">
+              <span id="status-dot" class="inline-block size-2 rounded-full bg-warning"></span>
+              <span id="status-text" class="text-base-content/60">初始化</span>
             </p>
           </div>
-          <button id="btn-theme" class="btn btn-circle btn-ghost theme-button" type="button" title="切换深色模式">
+          <button id="btn-theme" class="btn btn-circle btn-ghost shrink-0" type="button" title="切换深色模式">
             <svg id="theme-icon" class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
           </button>
         </header>
 
-        <section id="messages" class="messages-pane scroll-thin" aria-live="polite"></section>
+        <section id="messages" class="flex-1 overflow-auto scroll-thin p-4 sm:p-5 glass-light" aria-live="polite"></section>
 
-        <form id="msg-form" class="composer">
+        <form id="msg-form" class="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-t border-base-300/60 bg-white/82 shrink-0">
           <input type="file" id="file-input" accept="image/*" class="hidden">
-          <button id="btn-image" type="button" class="btn btn-circle btn-ghost composer-icon-btn" title="发送图片">
+          <button id="btn-image" type="button" class="btn btn-circle btn-ghost text-primary shrink-0" title="发送图片">
             <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="3" y="3" width="18" height="18" rx="2"></rect>
               <circle cx="8.5" cy="8.5" r="1.5"></circle>
               <path d="M21 15l-5-5L5 21"></path>
             </svg>
           </button>
-          <input id="msg-input" class="input glass-input composer-input" maxlength="1200" autocomplete="off" spellcheck="false" placeholder="输入消息，本地加密后发送" disabled>
-          <button id="send-btn" class="btn btn-primary composer-send" type="submit" disabled>发送</button>
+          <input id="msg-input" class="input glass-input flex-1 min-w-0" maxlength="1200" autocomplete="off" spellcheck="false" placeholder="输入消息，本地加密后发送" disabled>
+          <button id="send-btn" class="btn btn-primary font-extrabold" type="submit" disabled>发送</button>
         </form>
       </main>
 
@@ -66,21 +68,21 @@
   </div>
 
   <!-- 设置弹窗：提示音 / 背景图 -->
-  <div id="settings" class="modal-backdrop hidden">
-    <div class="card settings-card">
-      <div class="card-body settings-body">
-        <div class="settings-head">
-          <h2 class="settings-title">我的设置</h2>
+  <div id="settings" class="fixed inset-0 z-[80] hidden grid place-items-center bg-black/40 p-4">
+    <div class="card bg-base-100 text-base-content w-full max-w-sm shadow-2xl">
+      <div class="card-body gap-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-bold m-0">我的设置</h2>
           <button id="settings-close" class="btn btn-sm btn-circle btn-ghost" type="button">✕</button>
         </div>
-        <label class="settings-label">
+        <label class="flex items-center justify-between gap-3 cursor-pointer">
           <span>新消息提示音</span>
           <input id="set-sound" type="checkbox" class="toggle toggle-primary" checked>
         </label>
-        <div class="settings-stack">
+        <div class="flex flex-col gap-2">
           <span class="text-sm">聊天背景图（仅本机，不上传）</span>
-          <div class="settings-row">
-            <input id="set-bg" type="file" accept="image/*" class="file-input file-input-sm settings-file">
+          <div class="flex gap-2">
+            <input id="set-bg" type="file" accept="image/*" class="file-input file-input-sm flex-1">
             <button id="bg-reset" class="btn btn-sm" type="button">恢复默认</button>
           </div>
         </div>
@@ -89,11 +91,11 @@
   </div>
 
   <!-- 图片灯箱 -->
-  <div id="lightbox" class="lightbox hidden">
-    <img id="lightbox-img" class="lightbox-image" alt="图片预览">
+  <div id="lightbox" class="fixed inset-0 z-[90] hidden bg-black/85 grid place-items-center p-4 cursor-zoom-out">
+    <img id="lightbox-img" class="max-w-[92vw] max-h-[92vh] rounded-lg" alt="图片预览">
   </div>
 
-  <div id="toast" class="toast toast-top toast-center toast-layer hidden">
+  <div id="toast" class="toast toast-top toast-center z-50 hidden">
     <div id="toast-text" class="alert shadow-lg"></div>
   </div>
 </body>
