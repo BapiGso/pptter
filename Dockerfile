@@ -1,28 +1,26 @@
-FROM golang:alpine
+FROM node:lts-alpine AS web-build
 
-# 为我们的镜像设置必要的环境变量
-ENV GO111MODULE=on \
-    CGO_ENABLED=0 \
-    GOOS=linux \
-    GOARCH=amd64
+WORKDIR /app
 
-# 移动到工作目录：/build
-WORKDIR /build
+COPY package.json ./
+COPY web ./web
+RUN npm install
+RUN npm run build:css
 
-# 将代码复制到容器中
+FROM golang:1.26-alpine AS build
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
 COPY . .
+COPY --from=web-build /app/web/static/css/app.css ./web/static/css/app.css
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/server ./cmd/server
 
-# 将我们的代码编译成二进制可执行文件app
-RUN go build -o app .
+FROM gcr.io/distroless/static-debian12
 
-# 移动到用于存放生成的二进制文件的 /dist 目录
-WORKDIR /dist
+COPY --from=build /out/server /server
 
-# 将二进制文件从 /build 目录复制到这里
-RUN cp /build/app .
-
-# 声明服务端口
-EXPOSE 80
-
-# 启动容器时运行的命令
-CMD ["/dist/app"]
+USER 65532
+EXPOSE 8080
+ENTRYPOINT ["/server"]
