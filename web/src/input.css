@@ -1,0 +1,419 @@
+@import "tailwindcss";
+
+/* 扫描这些文件里用到的类名，只编译用到的部分。 */
+@source "../index.html";
+@source "../static/js/app.js";
+
+/* 只启用自定义主题，去掉内置主题以减小体积。 */
+@plugin "daisyui" {
+  themes: false;
+}
+
+/* pptter 主题：复刻旧版青绿 + 胶囊圆角风格。 */
+@plugin "daisyui/theme" {
+  name: "pptter";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #ffffff;
+  --color-base-200: #f1f5f9;
+  --color-base-300: #e2e8f0;
+  --color-base-content: #263238;
+
+  --color-primary: #059f95;
+  --color-primary-content: #ffffff;
+  --color-secondary: #06c7ba;
+  --color-secondary-content: #00302d;
+  --color-accent: #81e6f4;
+  --color-accent-content: #063c43;
+  --color-neutral: #334047;
+  --color-neutral-content: #f1f5f9;
+
+  --color-info: #0ea5e9;
+  --color-info-content: #ffffff;
+  --color-success: #059f95;
+  --color-success-content: #ffffff;
+  --color-warning: #f59e0b;
+  --color-warning-content: #4a2e00;
+  --color-error: #f43f5e;
+  --color-error-content: #ffffff;
+
+  --radius-selector: 999px;
+  --radius-field: 999px;
+  --radius-box: 1rem;
+  --border: 1px;
+  --depth: 1;
+}
+
+/* pptter-dark 深色主题：保留青绿主色，底色调暗。 */
+@plugin "daisyui/theme" {
+  name: "pptter-dark";
+  default: false;
+  prefersdark: false;
+  color-scheme: dark;
+
+  --color-base-100: #1b2227;
+  --color-base-200: #222b31;
+  --color-base-300: #2c373e;
+  --color-base-content: #e6edf0;
+
+  --color-primary: #06c7ba;
+  --color-primary-content: #00302d;
+  --color-secondary: #059f95;
+  --color-secondary-content: #ffffff;
+  --color-accent: #2bd4e8;
+  --color-accent-content: #052e34;
+  --color-neutral: #cbd5d8;
+  --color-neutral-content: #1b2227;
+
+  --color-info: #0ea5e9;
+  --color-info-content: #ffffff;
+  --color-success: #059f95;
+  --color-success-content: #ffffff;
+  --color-warning: #f59e0b;
+  --color-warning-content: #2a1c00;
+  --color-error: #f43f5e;
+  --color-error-content: #ffffff;
+
+  --radius-selector: 999px;
+  --radius-field: 999px;
+  --radius-box: 1rem;
+  --border: 1px;
+  --depth: 1;
+}
+
+/* pptter-grape：葡萄紫亮色。 */
+@plugin "daisyui/theme" {
+  name: "pptter-grape";
+  default: false;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #ffffff;
+  --color-base-200: #f5f1fb;
+  --color-base-300: #e7ddf5;
+  --color-base-content: #2c2440;
+
+  --color-primary: #7c3aed;
+  --color-primary-content: #ffffff;
+  --color-secondary: #a855f7;
+  --color-secondary-content: #2a0a4a;
+  --color-accent: #d8b4fe;
+  --color-accent-content: #3b0764;
+  --color-neutral: #3b3357;
+  --color-neutral-content: #f5f1fb;
+
+  --color-info: #6366f1;
+  --color-info-content: #ffffff;
+  --color-success: #10b981;
+  --color-success-content: #ffffff;
+  --color-warning: #f59e0b;
+  --color-warning-content: #4a2e00;
+  --color-error: #f43f5e;
+  --color-error-content: #ffffff;
+
+  --radius-selector: 999px;
+  --radius-field: 999px;
+  --radius-box: 1rem;
+  --border: 1px;
+  --depth: 1;
+}
+
+/* pptter-ocean：海蓝亮色。 */
+@plugin "daisyui/theme" {
+  name: "pptter-ocean";
+  default: false;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #ffffff;
+  --color-base-200: #eef5fb;
+  --color-base-300: #d9e8f5;
+  --color-base-content: #14283a;
+
+  --color-primary: #0369a1;
+  --color-primary-content: #ffffff;
+  --color-secondary: #0ea5e9;
+  --color-secondary-content: #012a3f;
+  --color-accent: #7dd3fc;
+  --color-accent-content: #043a52;
+  --color-neutral: #1f3547;
+  --color-neutral-content: #eef5fb;
+
+  --color-info: #0ea5e9;
+  --color-info-content: #ffffff;
+  --color-success: #059669;
+  --color-success-content: #ffffff;
+  --color-warning: #f59e0b;
+  --color-warning-content: #4a2e00;
+  --color-error: #f43f5e;
+  --color-error-content: #ffffff;
+
+  --radius-selector: 999px;
+  --radius-field: 999px;
+  --radius-box: 1rem;
+  --border: 1px;
+  --depth: 1;
+}
+
+/* pptter-sunset：暖橙亮色。 */
+@plugin "daisyui/theme" {
+  name: "pptter-sunset";
+  default: false;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #fffdfb;
+  --color-base-200: #fdf2ec;
+  --color-base-300: #f8dfd2;
+  --color-base-content: #3a2418;
+
+  --color-primary: #ea580c;
+  --color-primary-content: #ffffff;
+  --color-secondary: #f97316;
+  --color-secondary-content: #3a1500;
+  --color-accent: #fdba74;
+  --color-accent-content: #4a2400;
+  --color-neutral: #44322a;
+  --color-neutral-content: #fdf2ec;
+
+  --color-info: #0ea5e9;
+  --color-info-content: #ffffff;
+  --color-success: #16a34a;
+  --color-success-content: #ffffff;
+  --color-warning: #f59e0b;
+  --color-warning-content: #4a2e00;
+  --color-error: #e11d48;
+  --color-error-content: #ffffff;
+
+  --radius-selector: 999px;
+  --radius-field: 999px;
+  --radius-box: 1rem;
+  --border: 1px;
+  --depth: 1;
+}
+
+/* pptter-mid：午夜深蓝深色。 */
+@plugin "daisyui/theme" {
+  name: "pptter-mid";
+  default: false;
+  prefersdark: false;
+  color-scheme: dark;
+
+  --color-base-100: #14181f;
+  --color-base-200: #1b212b;
+  --color-base-300: #252d3a;
+  --color-base-content: #e3e9f2;
+
+  --color-primary: #6366f1;
+  --color-primary-content: #ffffff;
+  --color-secondary: #818cf8;
+  --color-secondary-content: #10132e;
+  --color-accent: #a5b4fc;
+  --color-accent-content: #161a3a;
+  --color-neutral: #c7cddb;
+  --color-neutral-content: #14181f;
+
+  --color-info: #38bdf8;
+  --color-info-content: #04222f;
+  --color-success: #34d399;
+  --color-success-content: #03261a;
+  --color-warning: #fbbf24;
+  --color-warning-content: #2a1c00;
+  --color-error: #fb7185;
+  --color-error-content: #2a0710;
+
+  --radius-selector: 999px;
+  --radius-field: 999px;
+  --radius-box: 1rem;
+  --border: 1px;
+  --depth: 1;
+}
+
+/* ---- 自定义层：背景渐变 + 玻璃拟态，daisyUI 组件之外的氛围。 ---- */
+
+[x-cloak] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--color-base-content);
+  background:
+    radial-gradient(circle at 12% 14%, rgb(85 227 189 / 0.34), transparent 24rem),
+    radial-gradient(circle at 86% 80%, rgb(13 202 240 / 0.22), transparent 26rem),
+    linear-gradient(135deg, #d8fff7 0%, #eef7ff 44%, #f7eefc 100%);
+}
+
+@layer utilities {
+  /* 半透明磨砂面板：青绿侧栏与群组栏。 */
+  .glass-teal {
+    background: rgb(5 159 149 / 0.5);
+    backdrop-filter: blur(10px);
+  }
+
+  .glass-teal-strong {
+    background: rgb(5 159 149 / 0.82);
+    backdrop-filter: blur(10px);
+  }
+
+  /* 半透明白面板：聊天区域。 */
+  .glass-light {
+    background: rgb(241 241 241 / 0.68);
+    backdrop-filter: blur(10px);
+  }
+
+  .glass-input {
+    background: rgb(255 255 255 / 0.72);
+  }
+}
+
+/* 消息气泡：收敛圆角、内边距并去掉 daisyUI 的小尾巴。
+   注意：换行/折行交给气泡内的文本 span（.chat-text），气泡本身不能用 pre-wrap，
+   否则会把 Alpine 模板里 span 周围的缩进空白也渲染成空行，撑高气泡。 */
+.chat-bubble {
+  border-radius: 1.05rem;
+  min-height: 0;
+  padding-block: 0.45rem;
+  padding-inline: 0.8rem;
+}
+
+.chat-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chat-bubble:before {
+  display: none !important;
+  content: none !important;
+}
+
+/* 媒体气泡（图片 / 文件）：收紧圆角与内边距，让内容服帖地嵌进气泡。 */
+.chat-bubble.is-media {
+  padding: 0.25rem;
+  border-radius: 0.85rem;
+}
+
+.chat-bubble.is-media img {
+  display: block;
+  border-radius: 0.62rem;
+}
+
+/* 静态头像精灵图：避免用 JS 写入 style=""，兼容严格 CSP。 */
+.avatar-sprite {
+  background-color: rgb(5 159 149 / 0.35);
+  background-image: url("/static/img/avatar.png");
+  background-image: image-set(
+    url("/static/img/avatar.avif") type("image/avif"),
+    url("/static/img/avatar.png") type("image/png")
+  );
+  background-repeat: no-repeat;
+  background-size: 600% 600%;
+  background-position: var(--avatar-x, 0%) var(--avatar-y, 0%);
+}
+
+.avatar-pos-0 { --avatar-x: 0%; --avatar-y: 0%; }
+.avatar-pos-1 { --avatar-x: 20%; --avatar-y: 0%; }
+.avatar-pos-2 { --avatar-x: 40%; --avatar-y: 0%; }
+.avatar-pos-3 { --avatar-x: 60%; --avatar-y: 0%; }
+.avatar-pos-4 { --avatar-x: 80%; --avatar-y: 0%; }
+.avatar-pos-5 { --avatar-x: 100%; --avatar-y: 0%; }
+.avatar-pos-6 { --avatar-x: 0%; --avatar-y: 20%; }
+.avatar-pos-7 { --avatar-x: 20%; --avatar-y: 20%; }
+.avatar-pos-8 { --avatar-x: 40%; --avatar-y: 20%; }
+.avatar-pos-9 { --avatar-x: 60%; --avatar-y: 20%; }
+.avatar-pos-10 { --avatar-x: 80%; --avatar-y: 20%; }
+.avatar-pos-11 { --avatar-x: 100%; --avatar-y: 20%; }
+.avatar-pos-12 { --avatar-x: 0%; --avatar-y: 40%; }
+.avatar-pos-13 { --avatar-x: 20%; --avatar-y: 40%; }
+.avatar-pos-14 { --avatar-x: 40%; --avatar-y: 40%; }
+.avatar-pos-15 { --avatar-x: 60%; --avatar-y: 40%; }
+.avatar-pos-16 { --avatar-x: 80%; --avatar-y: 40%; }
+.avatar-pos-17 { --avatar-x: 100%; --avatar-y: 40%; }
+.avatar-pos-18 { --avatar-x: 0%; --avatar-y: 60%; }
+.avatar-pos-19 { --avatar-x: 20%; --avatar-y: 60%; }
+.avatar-pos-20 { --avatar-x: 40%; --avatar-y: 60%; }
+.avatar-pos-21 { --avatar-x: 60%; --avatar-y: 60%; }
+.avatar-pos-22 { --avatar-x: 80%; --avatar-y: 60%; }
+.avatar-pos-23 { --avatar-x: 100%; --avatar-y: 60%; }
+.avatar-pos-24 { --avatar-x: 0%; --avatar-y: 80%; }
+.avatar-pos-25 { --avatar-x: 20%; --avatar-y: 80%; }
+.avatar-pos-26 { --avatar-x: 40%; --avatar-y: 80%; }
+.avatar-pos-27 { --avatar-x: 60%; --avatar-y: 80%; }
+.avatar-pos-28 { --avatar-x: 80%; --avatar-y: 80%; }
+.avatar-pos-29 { --avatar-x: 100%; --avatar-y: 80%; }
+.avatar-pos-30 { --avatar-x: 0%; --avatar-y: 100%; }
+.avatar-pos-31 { --avatar-x: 20%; --avatar-y: 100%; }
+.avatar-pos-32 { --avatar-x: 40%; --avatar-y: 100%; }
+.avatar-pos-33 { --avatar-x: 60%; --avatar-y: 100%; }
+.avatar-pos-34 { --avatar-x: 80%; --avatar-y: 100%; }
+.avatar-pos-35 { --avatar-x: 100%; --avatar-y: 100%; }
+
+/* 细滚动条，沿用旧版观感。 */
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scroll-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(0 0 0 / 0.18);
+  border-radius: 999px;
+}
+
+.scroll-thin::-webkit-scrollbar-track {
+  background: rgb(255 255 255 / 0.12);
+}
+
+/* 深色模式：背景与玻璃面板调暗。 */
+[data-theme="pptter-dark"] body,
+[data-theme="pptter-mid"] body {
+  background:
+    radial-gradient(circle at 12% 14%, rgb(6 199 186 / 0.16), transparent 24rem),
+    radial-gradient(circle at 86% 80%, rgb(13 110 160 / 0.18), transparent 26rem),
+    linear-gradient(135deg, #0e1417 0%, #121a1e 48%, #15121f 100%);
+}
+
+[data-theme="pptter-dark"] .glass-light,
+[data-theme="pptter-mid"] .glass-light {
+  background: rgb(20 26 30 / 0.62);
+}
+
+[data-theme="pptter-dark"] .glass-input,
+[data-theme="pptter-mid"] .glass-input {
+  background: rgb(255 255 255 / 0.10);
+  color: #e6edf0;
+}
+
+/* 用户自定义背景图由独立 <img> 渲染，body 仅保留兜底色。 */
+body.has-bg {
+  background: #000;
+}
+
+/* 深浅切换：从按钮位置以圆形遮罩扩散到整页（View Transitions API）。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 9999;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(root),
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.01ms !important;
+  }
+}

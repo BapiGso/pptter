@@ -1,0 +1,11 @@
+.git
+.github
+.idea
+.vscode
+.claude
+.deprecated
+node_modules
+*.exe
+*.test
+coverage.out
+.gocache
