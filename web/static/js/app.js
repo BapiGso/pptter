@@ -80,6 +80,9 @@
 
   // 单条活动的 WebRTC 直连（仅用于私聊大文件）。
   const P2P_IDLE_KEEPALIVE_MS = 2 * 60 * 1000;
+  // 握手超时：连接态（请求/打洞/响应）超过该时长仍未建立即放弃，给出明确提示并复位，
+  // 避免对方不在该会话时本端永远卡在「打洞中」。对方打开会话后由其重新发起即可自动重连。
+  const P2P_HANDSHAKE_TIMEOUT_MS = 15 * 1000;
   const rtc = {
     pc: null,
     channel: null,
@@ -92,6 +95,7 @@
     loadingIndex: 0,
     loadingTimer: 0,
     idleTimer: 0,
+    handshakeTimer: 0,
     recv: null,
     queue: [],
     sending: null,
@@ -1202,6 +1206,7 @@
 
   function setRtcState(nextState, peerId, label) {
     cancelRtcIdleClose();
+    cancelHandshakeTimeout();
     if (peerId) {
       rtc.peerId = peerId;
     }
@@ -1210,6 +1215,7 @@
     rtc.connecting = nextState === P2P_STATE.REQUESTING || nextState === P2P_STATE.OFFERING || nextState === P2P_STATE.ANSWERING;
     if (rtc.connecting) {
       startP2PLoading(rtc.peerId, label || p2pStateLabel(nextState));
+      scheduleHandshakeTimeout(rtc.peerId);
     } else {
       stopP2PLoading(false);
     }
@@ -1285,6 +1291,28 @@
     }
   }
 
+  function cancelHandshakeTimeout() {
+    if (rtc.handshakeTimer) {
+      window.clearTimeout(rtc.handshakeTimer);
+      rtc.handshakeTimer = 0;
+    }
+  }
+
+  function scheduleHandshakeTimeout(peerId) {
+    cancelHandshakeTimeout();
+    if (!peerId || peerId === GROUP) {
+      return;
+    }
+    rtc.handshakeTimer = window.setTimeout(() => {
+      rtc.handshakeTimer = 0;
+      if (rtc.peerId !== peerId || !rtc.connecting) {
+        return;
+      }
+      addSystemMessage("P2P 未建立：请确认对方也已打开本会话；对方打开后会自动重连。", peerId);
+      rtcReset();
+    }, P2P_HANDSHAKE_TIMEOUT_MS);
+  }
+
   function scheduleRtcIdleClose() {
     cancelRtcIdleClose();
     if (!rtc.peerId || rtc.state === P2P_STATE.IDLE || rtc.state === P2P_STATE.CLOSED || rtc.state === P2P_STATE.FAILED) {
@@ -1343,6 +1371,7 @@
 
   function rtcReset() {
     cancelRtcIdleClose();
+    cancelHandshakeTimeout();
     stopP2PLoading(false);
     closeRtcObjects();
     rtc.peerId = null;
@@ -1579,6 +1608,12 @@
 
   async function handleRtcSignal(peer, content) {
     const peerId = peer.id;
+    // 双向意图：仅在「正在查看该会话」或「已与该 peer 建立/协商中的连接」时处理信令。
+    // P2P 需双方都进入该私聊才建立，避免被动暴露 ICE 反射地址给未交谈的成员。
+    // 代价：对端刷新后需有一方重新打开会话才能重连——这是有意的安全取舍。
+    if (state.active !== peerId && rtc.peerId !== peerId) {
+      return;
+    }
     try {
       if (content.s === "req") {
         // 对方请求建立直连：由 ID 较大的一方发起，避免双方同时发 offer 造成 glare。
