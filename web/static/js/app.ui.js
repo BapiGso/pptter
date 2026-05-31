@@ -15,6 +15,16 @@
         p2pHidden: true,
         p2pConnected: false,
         p2pTitle: "建立 P2P 直连（大文件）",
+        shareHidden: true,
+        screenSharing: false,
+        remoteSharing: false,
+        shareMinimized: false,
+        shareTitle: "共享屏幕（仅对方可见）",
+        inCall: false,
+        remoteVoice: false,
+        micMuted: false,
+        callTitle: "发起语音通话",
+        micTitle: "静音",
         sendDisabled: true,
         inputPlaceholder: "群聊消息，本地加密后发送",
         draft: "",
@@ -36,6 +46,10 @@
         isDark: false,
         backgroundImage: "",
 
+        get callActive() {
+          return this.inCall || this.remoteVoice;
+        },
+
         init() {
           actions.bind(this);
           this.$watch("search", (value) => actions.searchChanged(value));
@@ -53,6 +67,12 @@
         },
         pickFile: actions.pickFile,
         p2pClick: actions.p2pClick,
+        toggleScreenShare: actions.toggleScreenShare,
+        fullscreenRemote: actions.fullscreenRemote,
+        pipRemote: actions.pipRemote,
+        toggleVoice: actions.toggleVoice,
+        toggleMute: actions.toggleMute,
+        hangupVoice: actions.hangupVoice,
         onFileInput: actions.onFileInput,
         dropFile: actions.dropFile,
         pasteFile: actions.pasteFile,

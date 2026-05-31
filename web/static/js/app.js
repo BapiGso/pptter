@@ -96,6 +96,15 @@
     queue: [],
     sending: null,
     sentFiles: new Map(),
+    polite: false,
+    makingOffer: false,
+    localShare: null,
+    shareSenders: null,
+    remoteStream: null,
+    localVoice: null,
+    voiceSenders: null,
+    micMuted: false,
+    remoteVoiceStream: null,
   };
   const P2P_LOADING_FRAMES = ["/", "-", "\\", "|"];
   const P2P_STATE = {
@@ -145,6 +154,31 @@
       reconnect: () => { void reconnect(); },
       pickFile: () => chooseFile(false),
       p2pClick: () => { void p2pButtonClick(); },
+      toggleScreenShare: () => { void toggleScreenShare(); },
+      fullscreenRemote: () => {
+        const video = ui && ui.$refs ? ui.$refs.remoteVideo : null;
+        if (video && typeof video.requestFullscreen === "function") {
+          void video.requestFullscreen().catch(() => {});
+        }
+      },
+      pipRemote: () => {
+        const video = ui && ui.$refs ? ui.$refs.remoteVideo : null;
+        if (!video) {
+          return;
+        }
+        if (document.pictureInPictureElement) {
+          void document.exitPictureInPicture().catch(() => {});
+        } else if (typeof video.requestPictureInPicture === "function") {
+          void video.requestPictureInPicture().catch(() => {});
+        }
+      },
+      toggleVoice: () => { void toggleVoice(); },
+      toggleMute: () => toggleMute(),
+      hangupVoice: () => {
+        // 挂断 = 彻底离开通话：停掉自己的麦克风，并停止接收对方音频、收起浮条。
+        stopVoice();
+        detachRemoteVoice();
+      },
       onFileInput: (event) => handlePickedFile(event.target),
       dropFile: (event) => {
         const files = event.dataTransfer && event.dataTransfer.files;
@@ -181,8 +215,26 @@
         playTone(ui ? ui.tone : state.tone);
       },
       saveStun: () => {
-        state.stun = ui ? String(ui.stun || "").trim() : "";
-        saveSetting("stun", state.stun);
+        const raw = ui ? String(ui.stun || "").trim() : "";
+        const stun = normalizeStunSetting(raw);
+        if (raw && !stun) {
+          state.stun = "";
+          removeSetting("stun");
+          if (ui) {
+            ui.stun = "";
+          }
+          showToast("STUN 地址格式无效，已忽略");
+          return;
+        }
+        state.stun = stun;
+        if (ui) {
+          ui.stun = stun;
+        }
+        if (stun) {
+          saveSetting("stun", stun);
+        } else {
+          removeSetting("stun");
+        }
       },
       fingerprint: () => fingerprint(),
       toggleTheme: (event) => toggleTheme(event),
@@ -194,6 +246,17 @@
 
   document.addEventListener("alpine:init", () => {
     registerAlpineComponent();
+  });
+
+  window.addEventListener("pagehide", () => {
+    closeRtcObjects();
+    closeSocket();
+  });
+
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted && booted) {
+      void reconnect();
+    }
   });
 
   registerAlpineComponent();
@@ -674,6 +737,9 @@
     if (key === GROUP || !canSend()) {
       return;
     }
+    if (rtcClosedFor(key)) {
+      rtcReset();
+    }
     if ((rtc.state === P2P_STATE.CONNECTED || rtc.connecting || rtc.pc) && rtc.peerId === key) {
       return;
     }
@@ -819,6 +885,13 @@
     ui.p2pHidden = !inDM;
     ui.p2pConnected = connected;
     ui.p2pTitle = connected ? "P2P 直连已建立，点击发送大文件" : connecting ? "P2P 打洞中…" : "建立 P2P 直连（大文件）";
+    ui.shareHidden = !inDM;
+    ui.screenSharing = !!rtc.localShare;
+    ui.shareTitle = rtc.localShare ? "停止共享屏幕" : "共享屏幕（仅对方可见）";
+    ui.inCall = !!rtc.localVoice;
+    ui.micMuted = rtc.micMuted;
+    ui.callTitle = rtc.localVoice ? "退出语音通话" : "发起语音通话";
+    ui.micTitle = rtc.micMuted ? "取消静音" : "静音";
   }
 
   function statusDisplayText() {
@@ -974,6 +1047,14 @@
     }
   }
 
+  function removeSetting(key) {
+    try {
+      localStorage.removeItem("pptter." + key);
+    } catch {
+      // localStorage 不可用（隐私模式等）时忽略。
+    }
+  }
+
   function initSettings() {
     const stored = lsGet("theme");
     const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -986,13 +1067,41 @@
     const tone = lsGet("tone");
     state.tone = (tone && TONES[tone]) ? tone : "soft";
 
-    state.stun = (lsGet("stun") || "").trim();
+    const storedStun = lsGet("stun");
+    state.stun = normalizeStunSetting(storedStun || "");
+    if (storedStun && !state.stun) {
+      removeSetting("stun");
+    }
     syncSettingsUI();
 
     const bg = lsGet("bg");
     if (bg) {
       applyBackground(bg, true);
     }
+  }
+
+  function normalizeStunSetting(raw) {
+    const value = String(raw || "").trim();
+    if (!value) {
+      return "";
+    }
+    const withScheme = value.match(/^(stun|stuns):(.+)$/i);
+    if (withScheme && validStunHostPort(withScheme[2])) {
+      return value;
+    }
+    if (validStunHostPort(value)) {
+      return "stun:" + value;
+    }
+    return "";
+  }
+
+  function validStunHostPort(value) {
+    const match = String(value || "").match(/^(\[[^\]]+\]|[A-Za-z0-9.-]+):([0-9]{1,5})$/);
+    if (!match) {
+      return false;
+    }
+    const port = Number(match[2]);
+    return Number.isInteger(port) && port > 0 && port <= 65535;
   }
 
   // setNick 更新本地昵称并向所有在线成员广播一次加密的资料帧。
@@ -1161,6 +1270,14 @@
     return rtc.state === P2P_STATE.CONNECTED && rtc.ready && rtc.peerId === peerId && rtc.channel && rtc.channel.readyState === "open";
   }
 
+  function rtcClosedFor(peerId) {
+    return rtc.peerId === peerId && (
+      rtc.state === P2P_STATE.FAILED ||
+      rtc.state === P2P_STATE.CLOSED ||
+      (rtc.pc && rtc.pc.connectionState === "closed")
+    );
+  }
+
   function cancelRtcIdleClose() {
     if (rtc.idleTimer) {
       window.clearTimeout(rtc.idleTimer);
@@ -1183,6 +1300,24 @@
 
   function closeRtcObjects() {
     failActiveTransfers("连接断开");
+    if (rtc.localShare) {
+      rtc.localShare.getTracks().forEach((track) => { try { track.stop(); } catch { /* 忽略 */ } });
+    }
+    rtc.localShare = null;
+    rtc.shareSenders = null;
+    hideRemoteShare();
+    if (rtc.localVoice) {
+      rtc.localVoice.getTracks().forEach((track) => { try { track.stop(); } catch { /* 忽略 */ } });
+    }
+    rtc.localVoice = null;
+    rtc.voiceSenders = null;
+    rtc.micMuted = false;
+    detachRemoteVoice();
+    if (ui) {
+      ui.screenSharing = false;
+      ui.inCall = false;
+      ui.micMuted = false;
+    }
     if (rtc.channel) {
       try { rtc.channel.close(); } catch { /* 忽略 */ }
     }
@@ -1194,6 +1329,7 @@
     rtc.ready = false;
     rtc.recv = null;
     rtc.sending = null;
+    rtc.makingOffer = false;
   }
 
   function failActiveTransfers(reason) {
@@ -1285,6 +1421,11 @@
       return rtc.pc;
     }
     rtc.peerId = peerId;
+    // 完美协商（perfect negotiation）的礼貌方判定：ID 较小者为礼貌方，
+    // 较大者为发起/不礼貌方（与既有「ID 大者发起」一致），用于消解重协商时的 offer 碰撞。
+    const selfID = state.self ? state.self.id : "";
+    rtc.polite = selfID < peerId;
+    rtc.makingOffer = false;
     const pc = new RTCPeerConnection(rtcConfig());
     rtc.pc = pc;
     pc.onicecandidate = (event) => {
@@ -1292,24 +1433,66 @@
         void sendContent({ k: "rtc", s: "ice", c: JSON.stringify(event.candidate) }, { toPeerId: peerId, silent: true });
       }
     };
+    pc.oniceconnectionstatechange = () => {
+      logP2PEvent("ice", { peer: shortID(peerId), iceConnectionState: pc.iceConnectionState });
+    };
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
-      if (s === "failed" || s === "disconnected" || s === "closed") {
-        if (rtc.peerId === peerId) {
-          const nextState = s === "failed" ? P2P_STATE.FAILED : P2P_STATE.CLOSED;
-          setRtcState(nextState, peerId);
-          addSystemMessage("P2P 直连已断开。", peerId);
-          logP2PEvent("closed", {
-            peer: shortID(peerId),
-            connectionState: pc.connectionState,
-            iceConnectionState: pc.iceConnectionState,
-          });
-          closeRtcObjects();
-        }
+      logP2PEvent("pcstate", { peer: shortID(peerId), connectionState: s, iceConnectionState: pc.iceConnectionState });
+      // 只把 failed/closed 当作致命；disconnected 多为重协商或瞬时丢包导致，通常会自行恢复，
+      // 若此时贸然 close 会把正常连接（含已建立的屏幕共享/语音）一并打断。
+      if ((s === "failed" || s === "closed") && rtc.peerId === peerId) {
+        const nextState = s === "failed" ? P2P_STATE.FAILED : P2P_STATE.CLOSED;
+        setRtcState(nextState, peerId);
+        addSystemMessage("P2P 直连已断开。", peerId);
+        logP2PEvent("closed", {
+          peer: shortID(peerId),
+          connectionState: pc.connectionState,
+          iceConnectionState: pc.iceConnectionState,
+        });
+        closeRtcObjects();
       }
       updateP2pButton();
     };
     pc.ondatachannel = (event) => setupChannel(event.channel, peerId);
+    // 接收对方媒体：视频轨=屏幕共享面板；音频轨=语音通话播放。媒体均走 DTLS-SRTP。
+    pc.ontrack = (event) => {
+      if (rtc.peerId !== peerId) {
+        return;
+      }
+      const track = event.track;
+      const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([track]);
+      if (track.kind === "video") {
+        showRemoteShare(peerId, stream);
+        track.addEventListener("ended", () => {
+          if (rtc.peerId === peerId) {
+            hideRemoteShare();
+          }
+        });
+        if (event.streams && event.streams[0]) {
+          event.streams[0].addEventListener("removetrack", () => {
+            if (rtc.peerId === peerId && event.streams[0].getVideoTracks().length === 0) {
+              hideRemoteShare();
+            }
+          });
+        }
+      } else if (track.kind === "audio") {
+        attachRemoteVoice(peerId, stream);
+        // 对方移除麦克风轨时，接收端按规范触发 mute（而非 ended），两者都收下以可靠收起浮条。
+        const drop = () => {
+          if (rtc.peerId === peerId) {
+            detachRemoteVoice();
+          }
+        };
+        track.addEventListener("ended", drop);
+        track.addEventListener("mute", drop);
+        track.addEventListener("unmute", () => {
+          if (rtc.peerId === peerId) {
+            attachRemoteVoice(peerId, stream);
+          }
+        });
+      }
+    };
     if (initiator) {
       setupChannel(pc.createDataChannel("p2p", { ordered: true }), peerId);
     }
@@ -1362,6 +1545,7 @@
     try {
       setRtcState(P2P_STATE.OFFERING, peerId, "P2P 打洞中");
       const pc = ensurePeerConnection(peerId, true);
+      rtc.makingOffer = true;
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       await sendContent({ k: "rtc", s: "offer", sdp: pc.localDescription.sdp }, { toPeerId: peerId, silent: true });
@@ -1369,12 +1553,17 @@
       setRtcState(P2P_STATE.FAILED, peerId);
       addSystemMessage("发起 P2P 失败：" + safeError(error), peerId);
       closeRtcObjects();
+    } finally {
+      rtc.makingOffer = false;
     }
   }
 
   async function requestP2P(peerId) {
     if (!peerId || peerId === GROUP || rtcConnected(peerId)) {
       return;
+    }
+    if (rtcClosedFor(peerId)) {
+      rtcReset();
     }
     const selfID = state.self ? state.self.id : "";
     if (selfID > peerId) {
@@ -1390,39 +1579,290 @@
 
   async function handleRtcSignal(peer, content) {
     const peerId = peer.id;
-    // 只允许当前私聊或已存在的单条热连接继续处理信令；
-    // 切到群聊时不中断既有 P2P，但也不会为其它成员新建连接，避免 N²。
-    if (state.active !== peerId && rtc.peerId !== peerId) {
-      return;
-    }
     try {
       if (content.s === "req") {
         // 对方请求建立直连：由 ID 较大的一方发起，避免双方同时发 offer 造成 glare。
         const selfID = state.self ? state.self.id : "";
-        if (selfID > peerId && !rtcConnected(peerId) && !(rtc.pc && rtc.peerId === peerId)) {
-          await startP2P(peerId);
+        if (selfID > peerId) {
+          if (rtc.peerId && rtc.peerId !== peerId) {
+            rtcReset();
+          } else if (rtcClosedFor(peerId)) {
+            rtcReset();
+          }
+          if (!rtcConnected(peerId) && !(rtc.pc && rtc.peerId === peerId)) {
+            await startP2P(peerId);
+          }
         }
-      } else if (content.s === "offer") {
+        return;
+      }
+      if (content.s === "ice") {
+        if (rtc.pc && rtc.peerId === peerId && content.c) {
+          try { await rtc.pc.addIceCandidate(JSON.parse(content.c)); } catch { /* 候选迟到或回滚期忽略 */ }
+        }
+        return;
+      }
+      if (content.s === "offer") {
+        if (rtc.peerId && rtc.peerId !== peerId) {
+          rtcReset();
+        } else if (rtcClosedFor(peerId)) {
+          rtcReset();
+        }
+        const fresh = !rtc.pc || rtc.peerId !== peerId;
         if (rtc.pc && rtc.peerId !== peerId) {
           rtcReset();
         }
-        setRtcState(P2P_STATE.ANSWERING, peerId, "正在响应 P2P");
+        if (fresh) {
+          setRtcState(P2P_STATE.ANSWERING, peerId, "正在响应 P2P");
+        }
         const pc = ensurePeerConnection(peerId, false);
+        // 完美协商：检测 offer 碰撞（我方正发 offer，或信令状态非 stable）。
+        const collision = rtc.makingOffer || pc.signalingState !== "stable";
+        logP2PEvent("offer-recv", { peer: shortID(peerId), polite: rtc.polite, collision: collision, signalingState: pc.signalingState });
+        if (collision && !rtc.polite) {
+          return; // 不礼貌方忽略碰撞 offer；礼貌方继续（setRemoteDescription 隐式回滚）。
+        }
         await pc.setRemoteDescription({ type: "offer", sdp: content.sdp });
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         await sendContent({ k: "rtc", s: "answer", sdp: pc.localDescription.sdp }, { toPeerId: peerId, silent: true });
-      } else if (content.s === "answer") {
-        if (rtc.pc && rtc.peerId === peerId) {
+        return;
+      }
+      if (content.s === "answer") {
+        logP2PEvent("answer-recv", { peer: shortID(peerId), signalingState: rtc.pc ? rtc.pc.signalingState : "no-pc" });
+        if (rtc.pc && rtc.peerId === peerId && rtc.pc.signalingState === "have-local-offer") {
           await rtc.pc.setRemoteDescription({ type: "answer", sdp: content.sdp });
         }
-      } else if (content.s === "ice") {
-        if (rtc.pc && rtc.peerId === peerId && content.c) {
-          try { await rtc.pc.addIceCandidate(JSON.parse(content.c)); } catch { /* 候选迟到忽略 */ }
-        }
+        return;
       }
     } catch (error) {
       addSystemMessage("P2P 协商失败：" + safeError(error), peerId);
+    }
+  }
+
+  // renegotiate 在已建立的连接上增删媒体轨（如屏幕共享）后重新发起协商。
+  async function renegotiate(peerId) {
+    const pc = rtc.pc;
+    if (!pc || rtc.peerId !== peerId) {
+      return;
+    }
+    try {
+      rtc.makingOffer = true;
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await sendContent({ k: "rtc", s: "offer", sdp: pc.localDescription.sdp }, { toPeerId: peerId, silent: true });
+    } catch (error) {
+      addSystemMessage("屏幕共享协商失败：" + safeError(error), peerId);
+    } finally {
+      rtc.makingOffer = false;
+    }
+  }
+
+  // ---- 屏幕共享：复用当前私聊的 PeerConnection，媒体走 DTLS-SRTP 端到端加密，服务器看不到。 ----
+
+  async function toggleScreenShare() {
+    if (rtc.localShare) {
+      stopScreenShare();
+      return;
+    }
+    await startScreenShare();
+  }
+
+  async function startScreenShare() {
+    if (state.active === GROUP || !canSend()) {
+      showToast("屏幕共享仅用于私聊");
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      showToast("当前环境不支持屏幕共享（需 HTTPS / localhost）");
+      return;
+    }
+    const peerId = state.active;
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: "monitor" },
+        audio: false,
+        selfBrowserSurface: "exclude",
+        systemAudio: "exclude",
+      });
+    } catch (error) {
+      if (error && (error.name === "NotAllowedError" || error.name === "AbortError")) {
+        return; // 用户在系统选择器里取消，不报错。
+      }
+      showToast("无法开始屏幕共享：" + safeError(error));
+      return;
+    }
+    ensureAudio();
+    // 主动发起共享的一方负责 offer；若尚无连接则顺带建数据通道，保证消息/文件 P2P 也可用。
+    const pc = ensurePeerConnection(peerId, true);
+    rtc.localShare = stream;
+    rtc.shareSenders = stream.getTracks().map((track) => pc.addTrack(track, stream));
+    // 用户通过浏览器原生「停止共享」按钮结束时，同步收尾。
+    stream.getVideoTracks().forEach((track) => {
+      track.addEventListener("ended", () => stopScreenShare());
+    });
+    if (ui) {
+      ui.screenSharing = true;
+    }
+    syncHeaderUI();
+    addSystemMessage("已开始向对方共享屏幕。", peerId);
+    await renegotiate(peerId);
+  }
+
+  function stopScreenShare() {
+    const peerId = rtc.peerId;
+    const wasSharing = !!rtc.localShare;
+    if (rtc.localShare) {
+      rtc.localShare.getTracks().forEach((track) => { try { track.stop(); } catch { /* 忽略 */ } });
+    }
+    if (rtc.shareSenders && rtc.pc) {
+      rtc.shareSenders.forEach((sender) => { try { rtc.pc.removeTrack(sender); } catch { /* 忽略 */ } });
+    }
+    rtc.localShare = null;
+    rtc.shareSenders = null;
+    if (ui) {
+      ui.screenSharing = false;
+    }
+    syncHeaderUI();
+    if (wasSharing && rtc.pc && peerId) {
+      addSystemMessage("已停止屏幕共享。", peerId);
+      void renegotiate(peerId);
+    }
+  }
+
+  function showRemoteShare(peerId, stream) {
+    rtc.remoteStream = stream;
+    if (ui) {
+      ui.remoteSharing = true;
+      ui.shareMinimized = false;
+      if (ui.$refs && ui.$refs.remoteVideo) {
+        ui.$refs.remoteVideo.srcObject = stream;
+      }
+    }
+    addSystemMessage("对方开始共享屏幕。", peerId);
+  }
+
+  function hideRemoteShare() {
+    if (!rtc.remoteStream && !(ui && ui.remoteSharing)) {
+      return;
+    }
+    rtc.remoteStream = null;
+    if (ui) {
+      ui.remoteSharing = false;
+      if (ui.$refs && ui.$refs.remoteVideo) {
+        ui.$refs.remoteVideo.srcObject = null;
+      }
+    }
+  }
+
+  // ---- 语音通话：把麦克风轨推入同一条 P2P，双方各自开麦即成两人会议室。 ----
+
+  async function toggleVoice() {
+    if (rtc.localVoice) {
+      stopVoice();
+      return;
+    }
+    await startVoice();
+  }
+
+  async function startVoice() {
+    if (state.active === GROUP || !canSend()) {
+      showToast("语音通话仅用于私聊");
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showToast("当前环境不支持语音（需 HTTPS / localhost）");
+      return;
+    }
+    const peerId = state.active;
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      });
+    } catch (error) {
+      if (error && (error.name === "NotAllowedError" || error.name === "AbortError")) {
+        showToast("已拒绝麦克风权限");
+        return;
+      }
+      showToast("无法开启语音：" + safeError(error));
+      return;
+    }
+    ensureAudio();
+    const pc = ensurePeerConnection(peerId, true);
+    rtc.localVoice = stream;
+    rtc.micMuted = false;
+    rtc.voiceSenders = stream.getTracks().map((track) => pc.addTrack(track, stream));
+    if (ui) {
+      ui.inCall = true;
+      ui.micMuted = false;
+    }
+    syncHeaderUI();
+    addSystemMessage("已加入语音通话。", peerId);
+    await renegotiate(peerId);
+  }
+
+  function stopVoice() {
+    const peerId = rtc.peerId;
+    const wasInCall = !!rtc.localVoice;
+    if (rtc.localVoice) {
+      rtc.localVoice.getTracks().forEach((track) => { try { track.stop(); } catch { /* 忽略 */ } });
+    }
+    if (rtc.voiceSenders && rtc.pc) {
+      rtc.voiceSenders.forEach((sender) => { try { rtc.pc.removeTrack(sender); } catch { /* 忽略 */ } });
+    }
+    rtc.localVoice = null;
+    rtc.voiceSenders = null;
+    rtc.micMuted = false;
+    if (ui) {
+      ui.inCall = false;
+      ui.micMuted = false;
+    }
+    syncHeaderUI();
+    if (wasInCall && rtc.pc && peerId) {
+      addSystemMessage("已退出语音通话。", peerId);
+      void renegotiate(peerId);
+    }
+  }
+
+  function toggleMute() {
+    if (!rtc.localVoice) {
+      return;
+    }
+    rtc.micMuted = !rtc.micMuted;
+    rtc.localVoice.getAudioTracks().forEach((track) => { track.enabled = !rtc.micMuted; });
+    if (ui) {
+      ui.micMuted = rtc.micMuted;
+    }
+    syncHeaderUI();
+  }
+
+  function attachRemoteVoice(peerId, stream) {
+    const wasActive = !!(ui && ui.remoteVoice);
+    rtc.remoteVoiceStream = stream;
+    if (ui) {
+      ui.remoteVoice = true;
+      if (ui.$refs && ui.$refs.remoteAudio) {
+        ui.$refs.remoteAudio.srcObject = stream;
+        void ui.$refs.remoteAudio.play().catch(() => {});
+      }
+    }
+    if (!wasActive) {
+      addSystemMessage("对方已接入语音。", peerId);
+    }
+  }
+
+  function detachRemoteVoice() {
+    if (!rtc.remoteVoiceStream && !(ui && ui.remoteVoice)) {
+      return;
+    }
+    rtc.remoteVoiceStream = null;
+    if (ui) {
+      ui.remoteVoice = false;
+      if (ui.$refs && ui.$refs.remoteAudio) {
+        ui.$refs.remoteAudio.srcObject = null;
+      }
     }
   }
 

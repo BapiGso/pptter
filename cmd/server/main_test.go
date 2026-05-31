@@ -197,9 +197,12 @@ func TestStripIdentifyingHeadersKeepsStrictCSPWithStun(test *testing.T) {
 		test.Fatalf("run middleware: %v", err)
 	}
 
-	expectedCSP := "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws: wss: stun: stuns:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+	expectedCSP := "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws: wss: stun: stuns:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests"
 	if recorder.Header().Get("Content-Security-Policy") != expectedCSP {
 		test.Fatalf("Content-Security-Policy = %q, want %q", recorder.Header().Get("Content-Security-Policy"), expectedCSP)
+	}
+	if got := recorder.Header().Get("Strict-Transport-Security"); got != "max-age=31536000; includeSubDomains" {
+		test.Fatalf("Strict-Transport-Security = %q, want max-age=31536000; includeSubDomains", got)
 	}
 }
 

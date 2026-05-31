@@ -302,8 +302,11 @@ func stripIdentifyingHeaders(next echo.HandlerFunc) echo.HandlerFunc {
 		response.Set("Cache-Control", "no-store")
 		response.Set("Referrer-Policy", "no-referrer")
 		response.Set("X-Content-Type-Options", "nosniff")
-		response.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()")
-		response.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws: wss: stun: stuns:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		// HSTS：强制后续只走 HTTPS，挡 SSL 剥离/降级。浏览器仅在通过 HTTPS 收到时才会采纳，
+		// 通过明文 HTTP 收到会被规范忽略，因此即便裸 HTTP 运行也无副作用。
+		response.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		response.Set("Permissions-Policy", "camera=(), microphone=(self), geolocation=(), interest-cohort=()")
+		response.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws: wss: stun: stuns:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests")
 
 		return next(c)
 	}
