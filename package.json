@@ -1,7 +1,7 @@
 {
   "name": "pptter-web",
   "private": true,
-  "description": "Local-only Tailwind v4 + daisyUI build for the zero-trust chat UI. Only the compiled web/static/css/app.css is served; no CDN, no runtime JS deps.",
+  "description": "Local-only Tailwind v4 + daisyUI build for the zero-trust chat UI. Static assets are served from /static with Alpine CSP vendored locally; no CDN.",
   "scripts": {
     "build:css": "tailwindcss -i ./web/src/input.css -o ./web/static/css/app.css --minify",
     "watch:css": "tailwindcss -i ./web/src/input.css -o ./web/static/css/app.css --watch"

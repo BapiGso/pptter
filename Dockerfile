@@ -23,4 +23,5 @@ COPY --from=build /out/server /server
 
 USER 65532
 EXPOSE 8080
+EXPOSE 3478/udp
 ENTRYPOINT ["/server"]

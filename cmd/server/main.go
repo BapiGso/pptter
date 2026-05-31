@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
+	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"log"
@@ -10,19 +13,29 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/labstack/echo/v5"
 
-	"pptter"
 	"pptter/internal/relay"
+	"pptter/internal/stunserver"
+	webfs "pptter/web"
 )
 
-const defaultAddr = ":8080"
+const (
+	defaultAddr  = ":8080"
+	defaultTitle = "PPTTER Zero Trust"
+)
 
 func main() {
+	cfg, err := loadServerConfig(os.Args[1:], os.LookupEnv, os.Stderr)
+	if err != nil {
+		os.Exit(2)
+	}
+
 	e := echo.New()
 
 	// 隐私系统默认不向控制台输出请求信息。
@@ -52,21 +65,44 @@ func main() {
 	e.Pre(stripIdentifyingHeaders)
 
 	hub := relay.NewHub(relay.NewConfig())
-	indexHTML, err := fs.ReadFile(pptter.WebFS(), "web/index.html")
+	indexHTML, err := fs.ReadFile(webfs.FS(), "index.html")
+	if err != nil {
+		os.Exit(1)
+	}
+	indexHTML = renderIndexHTML(indexHTML, cfg.Title)
+	faviconICO, err := fs.ReadFile(webfs.FS(), "static/img/favicon.ico")
 	if err != nil {
 		os.Exit(1)
 	}
 	serveIndex := func(c *echo.Context) error {
 		return c.Blob(http.StatusOK, "text/html; charset=utf-8", indexHTML)
 	}
+	serveFavicon := func(c *echo.Context) error {
+		return c.Blob(http.StatusOK, "image/x-icon", faviconICO)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	var stunServer *stunserver.Server
+	if cfg.STUNEnabled {
+		stunServer, err = stunserver.Start(ctx, cfg.STUNPort)
+		if err != nil {
+			os.Exit(1)
+		}
+	}
+	defer stunServer.Close()
 
 	// 健康检查不暴露运行细节，只返回 204。
 	e.GET("/healthz", func(c *echo.Context) error {
 		return c.NoContent(http.StatusNoContent)
 	})
+	e.GET("/favicon.ico", serveFavicon)
+
+	e.GET("/webrtc-config", webRTCConfigHandler(stunServer, cfg.STUNHost))
 
 	// 前端只从本机静态目录加载资源，不引用任何第三方 CDN。
-	e.StaticFS("/static", echo.MustSubFS(pptter.WebFS(), "web/static"))
+	e.StaticFS("/static", echo.MustSubFS(webfs.FS(), "static"))
 	// 单页应用：房间号放在前端 URL hash（#room）里，纯客户端处理，
 	// 服务端无需任何 /r/:room 路由重写。
 	e.GET("/", serveIndex)
@@ -75,11 +111,8 @@ func main() {
 	// 匿名房间入口：房间名只作为内存 map 的 key，不落盘。
 	e.GET("/ws/:room", hub.HandleWebSocket)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
 	startConfig := echo.StartConfig{
-		Address:         listenAddr(),
+		Address:         cfg.HTTPAddr,
 		HideBanner:      true,
 		HidePort:        true,
 		GracefulTimeout: 5 * time.Second,
@@ -95,12 +128,153 @@ func main() {
 	}
 }
 
-func listenAddr() string {
-	addr := strings.TrimSpace(os.Getenv("ADDR"))
-	if addr == "" {
-		return defaultAddr
+type serverConfig struct {
+	HTTPAddr    string
+	STUNEnabled bool
+	STUNPort    int
+	STUNHost    string
+	Title       string
+}
+
+func loadServerConfig(args []string, lookupEnv func(string) (string, bool), output io.Writer) (serverConfig, error) {
+	cfg, err := defaultServerConfig(lookupEnv)
+	if err != nil {
+		return serverConfig{}, err
 	}
-	return addr
+
+	flags := flag.NewFlagSet("pptter-server", flag.ContinueOnError)
+	flags.SetOutput(output)
+
+	flags.StringVar(&cfg.HTTPAddr, "addr", cfg.HTTPAddr, "HTTP listen address, for example :8080 or 127.0.0.1:8080")
+	flags.BoolVar(&cfg.STUNEnabled, "stun", cfg.STUNEnabled, "enable built-in first-party STUN server")
+	flags.IntVar(&cfg.STUNPort, "stun-port", cfg.STUNPort, "UDP port for the built-in STUN server, 0 means random")
+	flags.StringVar(&cfg.STUNHost, "stun-host", cfg.STUNHost, "public STUN hostname advertised to browsers")
+	flags.StringVar(&cfg.Title, "title", cfg.Title, "browser title and about-dialog title for the chat")
+
+	if err := flags.Parse(args); err != nil {
+		return serverConfig{}, err
+	}
+
+	cfg.HTTPAddr = strings.TrimSpace(cfg.HTTPAddr)
+	cfg.STUNHost = strings.TrimSpace(cfg.STUNHost)
+	cfg.Title = normalizeTitle(cfg.Title)
+	if cfg.HTTPAddr == "" {
+		return serverConfig{}, errors.New("http listen address cannot be empty")
+	}
+	if err := validatePort(cfg.STUNPort, "stun-port", true); err != nil {
+		return serverConfig{}, err
+	}
+
+	return cfg, nil
+}
+
+func defaultServerConfig(lookupEnv func(string) (string, bool)) (serverConfig, error) {
+	cfg := serverConfig{
+		HTTPAddr:    envFirst(lookupEnv, defaultAddr, "ADDR"),
+		STUNEnabled: true,
+		STUNPort:    stunserver.DefaultPort,
+		STUNHost:    envFirst(lookupEnv, "", "STUN_HOST"),
+		Title:       normalizeTitle(envFirst(lookupEnv, defaultTitle, "CHAT_TITLE")),
+	}
+
+	if rawEnabled := envFirst(lookupEnv, "", "STUN_ENABLED"); rawEnabled != "" {
+		enabled, err := parseBool(rawEnabled, "STUN_ENABLED")
+		if err != nil {
+			return serverConfig{}, err
+		}
+		cfg.STUNEnabled = enabled
+	}
+
+	if rawPort := envFirst(lookupEnv, "", "STUN_PORT"); rawPort != "" {
+		port, err := parsePort(rawPort, "STUN_PORT", true)
+		if err != nil {
+			return serverConfig{}, err
+		}
+		cfg.STUNPort = port
+	}
+
+	return cfg, nil
+}
+
+func envFirst(lookupEnv func(string) (string, bool), fallback string, names ...string) string {
+	for _, name := range names {
+		if value, ok := lookupEnv(name); ok {
+			if clean := strings.TrimSpace(value); clean != "" {
+				return clean
+			}
+		}
+	}
+	return fallback
+}
+
+func parsePort(raw string, name string, allowZero bool) (int, error) {
+	port, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s", name)
+	}
+	if err := validatePort(port, name, allowZero); err != nil {
+		return 0, err
+	}
+	return port, nil
+}
+
+func validatePort(port int, name string, allowZero bool) error {
+	if port < 0 || port > 65535 || (!allowZero && port == 0) {
+		return fmt.Errorf("invalid %s", name)
+	}
+	return nil
+}
+
+func parseBool(raw string, name string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "t", "true", "y", "yes", "on":
+		return true, nil
+	case "0", "f", "false", "n", "no", "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid %s", name)
+	}
+}
+
+func normalizeTitle(title string) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return defaultTitle
+	}
+	return title
+}
+
+func renderIndexHTML(indexHTML []byte, title string) []byte {
+	escapedTitle := html.EscapeString(normalizeTitle(title))
+	content := string(indexHTML)
+	content = strings.ReplaceAll(content, "<title>"+defaultTitle+"</title>", "<title>"+escapedTitle+"</title>")
+	content = strings.ReplaceAll(content, "关于 PPTTER", "关于 "+escapedTitle)
+	return []byte(content)
+}
+
+type webRTCConfigResponse struct {
+	Enabled  bool   `json:"enabled"`
+	STUNPort *int   `json:"stunPort,omitempty"`
+	STUNHost string `json:"stunHost,omitempty"`
+}
+
+func webRTCConfigHandler(stunServer *stunserver.Server, stunHost string) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		c.Response().Header().Set("Cache-Control", "no-store")
+
+		if !stunServer.Running() {
+			return c.JSON(http.StatusOK, webRTCConfigResponse{
+				Enabled: false,
+			})
+		}
+
+		stunPort := stunServer.Port()
+		return c.JSON(http.StatusOK, webRTCConfigResponse{
+			Enabled:  true,
+			STUNPort: &stunPort,
+			STUNHost: stunHost,
+		})
+	}
 }
 
 // stripIdentifyingHeaders 尽量在应用层丢弃可识别请求头。
@@ -129,7 +303,7 @@ func stripIdentifyingHeaders(next echo.HandlerFunc) echo.HandlerFunc {
 		response.Set("Referrer-Policy", "no-referrer")
 		response.Set("X-Content-Type-Options", "nosniff")
 		response.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()")
-		response.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+		response.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' ws: wss: stun: stuns:; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
 
 		return next(c)
 	}

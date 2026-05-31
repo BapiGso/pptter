@@ -5,98 +5,291 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <title>PPTTER Zero Trust</title>
+  <link rel="icon" href="/static/img/favicon.ico" sizes="any">
+  <link rel="icon" type="image/webp" href="/static/img/icon.webp">
+  <link rel="apple-touch-icon" href="/static/img/icon.png">
   <link rel="stylesheet" href="/static/css/app.css">
+  <script defer src="/static/js/app.core.js"></script>
+  <script defer src="/static/js/app.ui.js"></script>
   <script defer src="/static/js/app.js"></script>
+  <script defer src="/static/js/alpine.csp.min.js"></script>
 </head>
-<body>
-  <div class="min-h-screen w-full grid place-items-center p-0 md:p-6">
-    <div class="flex flex-col md:flex-row w-full md:max-w-6xl h-screen md:h-[min(88vh,52rem)] overflow-hidden md:rounded-2xl md:shadow-2xl">
+<body x-data="chat" :class="{ 'has-bg': backgroundImage }" x-on:paste.window="pasteFile" x-on:dragover.window.prevent x-on:drop.window.prevent="dropFile" x-on:pointerdown.window.once="ensureAudio">
+  <img x-cloak :class="{ 'hidden': !backgroundImage }" :src="backgroundImage" class="fixed inset-0 z-0 h-full w-full object-cover" alt="" aria-hidden="true">
+  <div class="relative z-10 min-h-screen w-full grid place-items-center p-0 md:p-6">
+    <div class="flex flex-col md:flex-row w-full md:max-w-6xl h-dvh md:h-[min(88vh,52rem)] overflow-hidden md:rounded-2xl md:shadow-2xl">
+
+      <!-- 移动端抽屉遮罩 -->
+      <div x-cloak :class="{ 'hidden': !menuOpen }" class="fixed inset-0 z-40 bg-black/40 md:hidden" x-on:click="menuOpen = false"></div>
 
       <!-- 图标侧栏 -->
       <aside class="hidden md:flex glass-teal-strong w-16 flex-col items-center gap-3 py-4 shrink-0">
-        <button id="btn-profile" class="btn btn-circle btn-ghost p-0" type="button" title="我的设置">
-          <span id="self-avatar" class="size-9 grid place-items-center rounded-full text-xs font-extrabold uppercase text-white bg-white/30 select-none">我</span>
+        <button class="btn btn-circle btn-ghost p-0" type="button" title="我的设置" x-on:click="openSettings">
+          <span class="size-9 grid place-items-center rounded-full text-xs font-extrabold uppercase text-white bg-white/30 select-none" :class="selfAvatarClass" x-text="selfAvatarText">我</span>
         </button>
         <div class="flex-1"></div>
-        <button id="btn-reconnect" class="btn btn-circle btn-ghost text-white" type="button" title="重新连接（重置身份）">
+        <button class="btn btn-circle btn-ghost text-white" type="button" title="关于" x-on:click="openAbout">
+          <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"></circle><path d="M12 16v-4M12 8h.01"></path>
+          </svg>
+        </button>
+        <button class="btn btn-circle btn-ghost text-white" type="button" title="重新连接（重置身份）" x-on:click="reconnect">
           <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"></path><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"></path>
           </svg>
         </button>
       </aside>
 
-      <!-- 会话列表：群聊 + 联系人（常驻） -->
-      <section class="glass-teal w-full md:w-72 flex flex-col shrink-0 max-h-40 md:max-h-none">
-        <div class="p-3">
-          <input id="search" class="input input-sm w-full glass-input" placeholder="搜索成员" autocomplete="off" spellcheck="false">
+      <!-- 会话列表：桌面常驻列，移动端从左侧滑入的抽屉 -->
+      <section
+        class="glass-teal flex flex-col shrink-0 z-50 w-72 max-w-[82vw] fixed inset-y-0 left-0 transform transition-transform duration-200 ease-out md:static md:z-auto md:w-72 md:max-w-none md:translate-x-0"
+        :class="{ '-translate-x-full': !menuOpen }">
+        <!-- 移动端操作行：替代被隐藏的图标侧栏 -->
+        <div class="flex items-center gap-1 px-2.5 pt-2.5 md:hidden">
+          <button class="btn btn-circle btn-ghost btn-sm p-0" type="button" title="我的设置" x-on:click="openSettings">
+            <span class="size-8 grid place-items-center rounded-full text-xs font-extrabold uppercase text-white bg-white/30 select-none" :class="selfAvatarClass" x-text="selfAvatarText">我</span>
+          </button>
+          <span class="flex-1"></span>
+          <button class="btn btn-circle btn-ghost btn-sm text-white" type="button" title="关于" x-on:click="openAbout">
+            <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle><path d="M12 16v-4M12 8h.01"></path>
+            </svg>
+          </button>
+          <button class="btn btn-circle btn-ghost btn-sm text-white" type="button" title="重新连接（重置身份）" x-on:click="reconnect">
+            <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 5v4h4"></path><path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"></path>
+            </svg>
+          </button>
+          <button class="btn btn-circle btn-ghost btn-sm text-white" type="button" title="关闭" x-on:click="menuOpen = false">
+            <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18"></path>
+            </svg>
+          </button>
         </div>
-        <div id="convo-list" class="flex md:flex-col flex-row overflow-x-auto md:overflow-y-auto scroll-thin md:flex-1 gap-px pb-1"></div>
+        <div class="p-3">
+          <input class="input input-sm w-full glass-input" placeholder="搜索联系人 / 昵称" autocomplete="off" spellcheck="false" x-model="search">
+        </div>
+        <div class="flex flex-col overflow-y-auto scroll-thin flex-1 gap-px pb-1">
+          <template x-for="c in conversations" :key="c.key">
+            <button type="button"
+              class="flex items-center gap-3 px-3.5 py-2.5 text-left text-white shrink-0 w-auto hover:bg-white/10"
+              :class="{ 'bg-white/20': active === c.key }" x-on:click="select(c.key)">
+              <span :class="{ 'hidden': !c.isGroup }" class="size-11 grid shrink-0 place-items-center rounded-full bg-white/25 text-white font-extrabold">群</span>
+              <span :class="[c.avatarClass, { 'hidden': c.isGroup }]" class="size-11 grid shrink-0 place-items-center rounded-full text-xs font-extrabold uppercase text-white select-none" x-text="c.text"></span>
+              <span class="min-w-0 flex-1">
+                <span class="flex items-center justify-between gap-2">
+                  <strong class="text-sm truncate" x-text="c.title"></strong>
+                  <span :class="{ 'hidden': c.unread <= 0 }" class="badge badge-xs badge-error" x-text="c.unread"></span>
+                </span>
+                <small class="block text-xs text-white/60 truncate" x-text="c.preview"></small>
+              </span>
+            </button>
+          </template>
+          <div :class="{ 'hidden': hasPeers }" class="px-3.5 py-2 text-xs text-white/70 shrink-0">还没有其他成员在线</div>
+        </div>
       </section>
 
       <!-- 聊天主区 -->
-      <main class="glass-light flex-1 flex flex-col min-w-0">
+      <main class="glass-light flex-1 flex flex-col min-w-0 min-h-0">
         <header class="flex items-center justify-between gap-3 px-4 sm:px-5 h-16 border-b border-base-300/60 glass-light shrink-0">
-          <div class="min-w-0">
-            <h1 id="convo-title" class="text-base font-semibold truncate m-0">群聊</h1>
-            <p class="text-xs m-0 flex items-center gap-1.5">
-              <span id="status-dot" class="inline-block size-2 rounded-full bg-warning"></span>
-              <span id="status-text" class="text-base-content/60">初始化</span>
-            </p>
+          <div class="flex items-center gap-2 min-w-0">
+            <button class="btn btn-circle btn-ghost btn-sm md:hidden shrink-0" type="button" title="会话列表" x-on:click="menuOpen = true">
+              <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 6h16M4 12h16M4 18h16"></path>
+              </svg>
+            </button>
+            <div class="min-w-0">
+              <h1 class="text-base font-semibold truncate m-0" x-text="convoTitle">群聊</h1>
+              <p class="text-xs m-0 flex items-center gap-1.5">
+                <span class="inline-block size-2 rounded-full" :class="statusDotClass"></span>
+                <span class="text-base-content/60" x-text="statusText">初始化</span>
+              </p>
+            </div>
           </div>
-          <button id="btn-theme" class="btn btn-circle btn-ghost shrink-0" type="button" title="切换深色模式">
-            <svg id="theme-icon" class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"></svg>
-          </button>
+          <div class="flex items-center gap-1 shrink-0">
+            <button x-cloak class="btn btn-circle btn-ghost" :class="{ 'hidden': p2pHidden, 'text-success': p2pConnected }" type="button" :title="p2pTitle" x-on:click="p2pClick">
+              <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="18" r="3"></circle><path d="M8.5 7.5l7 9"></path>
+              </svg>
+            </button>
+            <button class="btn btn-circle btn-ghost" type="button" title="切换深色模式" x-on:click="toggleTheme">
+              <svg :class="{ 'hidden': isDark }" class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
+              </svg>
+              <svg x-cloak :class="{ 'hidden': !isDark }" class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+              </svg>
+            </button>
+          </div>
         </header>
 
-        <section id="messages" class="flex-1 overflow-auto scroll-thin p-4 sm:p-5 glass-light" aria-live="polite"></section>
+        <section x-ref="messages" x-effect="scrollLatest()" class="flex-1 min-h-0 overflow-auto scroll-thin p-4 sm:p-5 glass-light" aria-live="polite">
+          <template x-for="m in messages" :key="m.id">
+            <div>
+              <template x-if="m.system">
+                <div class="flex justify-center my-2">
+                  <span class="badge badge-ghost badge-sm max-w-[85%] h-auto py-1 whitespace-normal text-center text-base-content/70" x-text="m.text"></span>
+                </div>
+              </template>
+              <template x-if="!m.system">
+                <div :class="m.chatClass">
+                  <div class="chat-image">
+                    <span class="size-9 grid shrink-0 place-items-center rounded-full text-xs font-extrabold uppercase text-white select-none" :class="m.avatarClass" x-text="m.avatarText"></span>
+                  </div>
+                  <div class="chat-header text-xs opacity-80 gap-1">
+                    <span x-text="m.author"></span><time class="opacity-60" x-text="m.timeText"></time>
+                  </div>
+                  <div :class="m.bubbleClass">
+                    <span :class="{ 'hidden': !m.isText }" class="chat-text" x-text="m.text"></span>
+                    <img :class="{ 'hidden': !m.isImage }" :src="m.src" class="max-w-[min(70vw,18rem)] max-h-[18rem] h-auto w-auto cursor-zoom-in" alt="图片" loading="lazy" x-on:click="showImage(m.src)">
+                    <template x-if="m.isFile">
+                      <div class="min-w-[10rem] max-w-[min(70vw,18rem)] px-2.5 py-2">
+                        <a :class="{ 'hidden': !m.canDownload }" :href="m.href" :download="m.name" :title="m.downloadTitle" class="flex items-center gap-3 no-underline text-current">
+                          <span class="shrink-0 grid place-items-center size-9 rounded-lg bg-base-100/30">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"></path><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+                          </span>
+                          <span class="min-w-0 flex flex-col">
+                            <strong class="text-sm truncate" x-text="m.name"></strong>
+                            <small class="text-xs opacity-70" x-text="m.meta"></small>
+                          </span>
+                        </a>
+                        <div :class="{ 'hidden': m.canDownload }" class="flex items-center gap-3 text-current">
+                          <span class="shrink-0 grid place-items-center size-9 rounded-lg bg-base-100/30">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"></path><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+                          </span>
+                          <span class="min-w-0 flex flex-col">
+                            <strong class="text-sm truncate" x-text="m.name"></strong>
+                            <small class="text-xs opacity-70" x-text="m.meta"></small>
+                          </span>
+                        </div>
+                        <div :class="{ 'hidden': !m.isTransfer }" class="mt-2 flex flex-col gap-1">
+                          <progress class="progress progress-primary h-1.5" max="100" :value="m.progress"></progress>
+                          <div class="flex items-center justify-between gap-2 text-xs opacity-80">
+                            <span x-text="m.progressText"></span>
+                            <span class="flex gap-1">
+                              <button :class="{ 'hidden': !m.canCancel }" type="button" class="btn btn-xs btn-ghost" x-on:click="cancelTransfer(m.id)">取消</button>
+                              <button :class="{ 'hidden': !m.canRetry }" type="button" class="btn btn-xs btn-ghost" x-on:click="retryTransfer(m.id)">重试</button>
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </section>
 
-        <form id="msg-form" class="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-t border-base-300/60 bg-white/82 shrink-0">
-          <input type="file" id="file-input" accept="image/*" class="hidden">
-          <button id="btn-image" type="button" class="btn btn-circle btn-ghost text-primary shrink-0" title="发送图片">
+        <form class="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 border-t border-base-300/60 bg-white/82 shrink-0" x-on:submit.prevent="sendText">
+          <input type="file" x-ref="fileInput" class="hidden" x-on:change="onFileInput">
+          <button type="button" class="btn btn-circle btn-ghost text-primary shrink-0" title="发送文件" :disabled="sendDisabled" x-on:click="pickFile">
             <svg class="size-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-              <circle cx="8.5" cy="8.5" r="1.5"></circle>
-              <path d="M21 15l-5-5L5 21"></path>
+              <path d="M21.4 11.05 12.25 20.2a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.48-8.49"></path>
             </svg>
           </button>
-          <input id="msg-input" class="input glass-input flex-1 min-w-0" maxlength="1200" autocomplete="off" spellcheck="false" placeholder="输入消息，本地加密后发送" disabled>
-          <button id="send-btn" class="btn btn-primary font-extrabold" type="submit" disabled>发送</button>
+          <input class="input glass-input flex-1 min-w-0" maxlength="1200" autocomplete="off" spellcheck="false" :placeholder="inputPlaceholder" :disabled="sendDisabled" x-model="draft">
+          <button class="btn btn-primary font-extrabold" type="submit" :disabled="sendDisabled">发送</button>
         </form>
       </main>
 
     </div>
   </div>
 
-  <!-- 设置弹窗：提示音 / 背景图 -->
-  <div id="settings" class="fixed inset-0 z-[80] hidden grid place-items-center bg-black/40 p-4">
-    <div class="card bg-base-100 text-base-content w-full max-w-sm shadow-2xl">
-      <div class="card-body gap-4">
+  <!-- 设置弹窗 -->
+  <div x-cloak :class="{ 'hidden': !settingsOpen }" class="fixed inset-0 z-[80] grid place-items-center bg-black/40 p-4" x-on:click.self="settingsOpen = false">
+    <div class="card bg-base-100 text-base-content w-full max-w-md shadow-2xl max-h-[88vh] overflow-y-auto scroll-thin">
+      <div class="card-body gap-5">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-bold m-0">我的设置</h2>
-          <button id="settings-close" class="btn btn-sm btn-circle btn-ghost" type="button">✕</button>
+          <button class="btn btn-sm btn-circle btn-ghost" type="button" x-on:click="settingsOpen = false">✕</button>
         </div>
-        <label class="flex items-center justify-between gap-3 cursor-pointer">
-          <span>新消息提示音</span>
-          <input id="set-sound" type="checkbox" class="toggle toggle-primary" checked>
-        </label>
-        <div class="flex flex-col gap-2">
-          <span class="text-sm">聊天背景图（仅本机，不上传）</span>
+
+        <section class="flex flex-col gap-2">
+          <span class="text-sm font-semibold opacity-70">昵称</span>
           <div class="flex gap-2">
-            <input id="set-bg" type="file" accept="image/*" class="file-input file-input-sm flex-1">
-            <button id="bg-reset" class="btn btn-sm" type="button">恢复默认</button>
+            <input type="text" maxlength="24" class="input input-sm flex-1" placeholder="给自己起个名字（仅本会话）" autocomplete="off" spellcheck="false" x-model="nick" x-on:keydown.enter="saveNick">
+            <button class="btn btn-sm btn-primary" type="button" x-on:click="saveNick">保存</button>
           </div>
+          <p class="text-xs opacity-50 m-0">昵称会随消息端到端加密发给联系人；留空则显示匿名 ID。</p>
+        </section>
+
+        <section class="flex flex-col gap-2">
+          <span class="text-sm font-semibold opacity-70">主题配色</span>
+          <select class="select select-sm w-full" x-model="theme" x-on:change="applyTheme(theme)">
+            <option value="pptter">青绿（亮）</option>
+            <option value="pptter-dark">青绿（暗）</option>
+            <option value="pptter-grape">葡萄紫（亮）</option>
+            <option value="pptter-ocean">海蓝（亮）</option>
+            <option value="pptter-sunset">暖橙（亮）</option>
+            <option value="pptter-mid">午夜蓝（暗）</option>
+          </select>
+        </section>
+
+        <section class="flex flex-col gap-3">
+          <label class="flex items-center justify-between gap-3 cursor-pointer">
+            <span class="text-sm font-semibold opacity-70">新消息提示音</span>
+            <input type="checkbox" class="toggle toggle-primary" x-model="soundOn" x-on:change="saveSound">
+          </label>
+          <div class="flex gap-2">
+            <select class="select select-sm flex-1" x-model="tone" x-on:change="saveTone">
+              <option value="soft">轻柔</option>
+              <option value="ding">叮咚</option>
+              <option value="pop">气泡</option>
+              <option value="chime">风铃</option>
+              <option value="blip">电子</option>
+            </select>
+            <button class="btn btn-sm" type="button" x-on:click="testTone">试听</button>
+          </div>
+        </section>
+
+        <section class="flex flex-col gap-2">
+          <span class="text-sm font-semibold opacity-70">聊天背景图（仅本机，不上传）</span>
+          <div class="flex gap-2">
+            <input type="file" accept="image/*" class="file-input file-input-sm flex-1" x-on:change="onBgFile">
+            <button class="btn btn-sm" type="button" x-on:click="resetBackground">恢复默认</button>
+          </div>
+        </section>
+
+        <section class="flex flex-col gap-2">
+          <span class="text-sm font-semibold opacity-70">P2P 直连 STUN（高级，可选）</span>
+          <input type="text" class="input input-sm w-full" placeholder="stun:host:port（可追加自定义 STUN）" autocomplete="off" spellcheck="false" x-model="stun" x-on:change="saveStun">
+          <p class="text-xs opacity-50 m-0">默认使用本站自建 STUN（无第三方）；填写后会额外向该 STUN 暴露 IP。</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- 关于弹窗 -->
+  <div x-cloak :class="{ 'hidden': !aboutOpen }" class="fixed inset-0 z-[80] grid place-items-center bg-black/40 p-4" x-on:click.self="aboutOpen = false">
+    <div class="card bg-base-100 text-base-content w-full max-w-md shadow-2xl">
+      <div class="card-body gap-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-bold m-0">关于 PPTTER</h2>
+          <button class="btn btn-sm btn-circle btn-ghost" type="button" x-on:click="aboutOpen = false">✕</button>
+        </div>
+        <p class="text-sm m-0 opacity-80">零信任匿名聊天：服务器只转发不可解密的密文，不落库、不写盘、不记录 IP 或内容。</p>
+        <ul class="text-sm opacity-80 list-disc pl-5 m-0 space-y-1">
+          <li>端到端加密：X25519 ECDH + HKDF（前向保密）、Ed25519 逐条签名（发送者认证）。</li>
+          <li>防重放、长度分桶填充、密钥指纹可做带外校验。</li>
+          <li>私聊支持 WebRTC P2P 直连，大文件不经服务器中转（群聊不建立 P2P，避免 N² 连接）。</li>
+          <li>纯本地静态资源，无任何第三方 CDN；UI 使用 Alpine.js CSP 构建，兼容严格 CSP。</li>
+        </ul>
+        <div class="text-xs opacity-60">
+          <div>本机身份指纹（用于带外核对身份）：</div>
+          <code class="block mt-1 break-all" x-text="fingerprint">—</code>
         </div>
       </div>
     </div>
   </div>
 
   <!-- 图片灯箱 -->
-  <div id="lightbox" class="fixed inset-0 z-[90] hidden bg-black/85 grid place-items-center p-4 cursor-zoom-out">
-    <img id="lightbox-img" class="max-w-[92vw] max-h-[92vh] rounded-lg" alt="图片预览">
+  <div x-cloak :class="{ 'hidden': !lightboxOpen }" class="fixed inset-0 z-[90] bg-black/85 grid place-items-center p-4 cursor-zoom-out" x-on:click="lightboxOpen = false">
+    <img class="max-w-[92vw] max-h-[92vh] rounded-lg" alt="图片预览" :src="lightboxSrc">
   </div>
 
-  <div id="toast" class="toast toast-top toast-center z-50 hidden">
-    <div id="toast-text" class="alert shadow-lg"></div>
+  <div x-cloak :class="{ 'hidden': !toastShown }" class="toast toast-top toast-center z-50">
+    <div class="alert shadow-lg" x-text="toastText"></div>
   </div>
 </body>
 </html>

@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  // 端到端加密的零信任群聊/私聊。不使用任何会触发 eval 的框架，兼容严格 CSP
-  // （script-src 'self'，无 unsafe-eval）。UI 用原生 DOM 渲染。
+  // 端到端加密的零信任群聊/私聊。UI 使用 Alpine.js CSP 构建，
+  // 兼容严格 CSP（script-src 'self'，无 unsafe-eval）。
   //
   // 协议 v2：
   //   - 身份密钥 Ed25519：派生匿名 ID，并对每条消息签名（发送者认证）。
@@ -15,19 +15,40 @@
   //   - 明文内容是一段 JSON：{k:"t",t:文本} 或 {k:"i",m:mime,d:图片Base64}，
   //     因此文字和图片都端到端加密，服务器只转发不可解密的密文。
 
-  const PROTOCOL = "X25519-HKDF-A256GCM+Ed25519";
-  const PROTOCOL_VERSION = 2;
-  const HKDF_INFO = "pptter-msg-v2";
-  const PAD_BUCKET = 256;
-  const MAX_TEXT_BYTES = 4096;
-  const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024;
-  const REPLAY_WINDOW_MS = 5 * 60 * 1000;
-  const DEFAULT_ROOM = "lobby";
-  const GROUP = "group";
-  const MAX_MESSAGES_PER_THREAD = 200;
-  const roomPattern = /[^A-Za-z0-9_-]/g;
-  const textEncoder = new TextEncoder();
-  const textDecoder = new TextDecoder();
+  const core = window.PPTTERCore;
+  if (!core) {
+    throw new Error("PPTTERCore 未加载");
+  }
+  const {
+    PROTOCOL,
+    PROTOCOL_VERSION,
+    MAX_TEXT_BYTES,
+    MAX_RELAY_BYTES,
+    RTC_CHUNK,
+    REPLAY_WINDOW_MS,
+    GROUP,
+    MAX_NICK_LEN,
+    MAX_MESSAGES_PER_THREAD,
+    TONES,
+    THEMES,
+    textEncoder,
+    deriveSharedKey,
+    signedView,
+    padPlaintext,
+    unpadPlaintext,
+    initialRoom,
+    websocketURL,
+    bytesToBase64,
+    base64ToBytes,
+    wipeBytes,
+    shortID,
+    avatarIndex,
+    formatTime,
+    safeError,
+    humanSize,
+    isDarkTheme,
+    stunURL,
+  } = core;
 
   const state = {
     room: initialRoom(),
@@ -38,6 +59,12 @@
     active: GROUP,
     search: "",
     muted: false,
+    nick: "",
+    tone: "soft",
+    stun: "",
+    backgroundImage: "",
+    iceServers: null,
+    p2pPick: false,
     socket: null,
     identityKeyPair: null,
     dhKeyPair: null,
@@ -46,88 +73,174 @@
     dhSigB64: "",
     sendCounter: 0,
     nextMessageID: 1,
+    statusText: "初始化",
     statusTone: "warn",
     reconnecting: false,
   };
 
-  const dom = {};
+  // 单条活动的 WebRTC 直连（仅用于私聊大文件）。
+  const P2P_IDLE_KEEPALIVE_MS = 2 * 60 * 1000;
+  const rtc = {
+    pc: null,
+    channel: null,
+    peerId: null,
+    state: "idle",
+    ready: false,
+    connecting: false,
+    loadingLabel: "",
+    loadingFrame: "/",
+    loadingIndex: 0,
+    loadingTimer: 0,
+    idleTimer: 0,
+    recv: null,
+    queue: [],
+    sending: null,
+    sentFiles: new Map(),
+  };
+  const P2P_LOADING_FRAMES = ["/", "-", "\\", "|"];
+  const P2P_STATE = {
+    IDLE: "idle",
+    REQUESTING: "requesting",
+    OFFERING: "offering",
+    ANSWERING: "answering",
+    CONNECTED: "connected",
+    FAILED: "failed",
+    CLOSED: "closed",
+  };
+  const TRANSFER_STATUS = {
+    QUEUED: "queued",
+    SENDING: "sending",
+    RECEIVING: "receiving",
+    DONE: "done",
+    FAILED: "failed",
+    CANCELED: "canceled",
+  };
+
   let toastTimer = 0;
   let audioCtx = null;
-  let avatarSpriteURL = "";
+  let booted = false;
+  let ui = null;
+
+  function boot() {
+    if (booted) {
+      return;
+    }
+    booted = true;
+    start();
+  }
+
+  function alpineActions() {
+    return {
+      bind(instance) {
+        ui = instance;
+      },
+      boot,
+      sync: syncUI,
+      searchChanged(value) {
+        state.search = String(value || "");
+        renderConversations();
+      },
+      sendText: () => { void sendText(); },
+      select: (key) => selectConversation(key),
+      reconnect: () => { void reconnect(); },
+      pickFile: () => chooseFile(false),
+      p2pClick: () => { void p2pButtonClick(); },
+      onFileInput: (event) => handlePickedFile(event.target),
+      dropFile: (event) => {
+        const files = event.dataTransfer && event.dataTransfer.files;
+        if (files && files[0]) {
+          void handleFile(files[0]);
+        }
+      },
+      pasteFile: (event) => {
+        const files = event.clipboardData && event.clipboardData.files;
+        if (files && files[0]) {
+          void handleFile(files[0]);
+        }
+      },
+      saveSound: () => {
+        state.muted = !(ui && ui.soundOn);
+        saveSetting("muted", state.muted ? "1" : "0");
+      },
+      onBgFile: (event) => {
+        const input = event.target;
+        if (input.files && input.files[0]) {
+          void handleBgFile(input.files[0]);
+        }
+        input.value = "";
+      },
+      resetBackground: () => applyBackground(null),
+      saveNick: () => setNick(ui ? ui.nick : ""),
+      applyTheme: (theme) => applyTheme(theme),
+      saveTone: () => {
+        state.tone = (ui && TONES[ui.tone]) ? ui.tone : "soft";
+        saveSetting("tone", state.tone);
+      },
+      testTone: () => {
+        ensureAudio();
+        playTone(ui ? ui.tone : state.tone);
+      },
+      saveStun: () => {
+        state.stun = ui ? String(ui.stun || "").trim() : "";
+        saveSetting("stun", state.stun);
+      },
+      fingerprint: () => fingerprint(),
+      toggleTheme: (event) => toggleTheme(event),
+      ensureAudio: () => ensureAudio(),
+      cancelTransfer: (messageId) => cancelTransfer(messageId),
+      retryTransfer: (messageId) => retryTransfer(messageId),
+    };
+  }
+
+  document.addEventListener("alpine:init", () => {
+    registerAlpineComponent();
+  });
+
+  registerAlpineComponent();
+
+  function registerAlpineComponent() {
+    if (!window.Alpine || window.__pptterChatRegistered) {
+      return;
+    }
+    window.__pptterChatRegistered = true;
+    window.Alpine.data("chat", window.PPTTERUI.createChatComponent(alpineActions()));
+    if (document.body && document.body.hasAttribute("x-data") && !document.body._x_dataStack && typeof window.Alpine.initTree === "function") {
+      window.Alpine.initTree(document.body);
+    }
+  }
 
   function start() {
-    dom.convoList = document.getElementById("convo-list");
-    dom.search = document.getElementById("search");
-    dom.convoTitle = document.getElementById("convo-title");
-    dom.statusDot = document.getElementById("status-dot");
-    dom.statusText = document.getElementById("status-text");
-    dom.messages = document.getElementById("messages");
-    dom.form = document.getElementById("msg-form");
-    dom.input = document.getElementById("msg-input");
-    dom.sendBtn = document.getElementById("send-btn");
-    dom.reconnect = document.getElementById("btn-reconnect");
-    dom.fileInput = document.getElementById("file-input");
-    dom.btnImage = document.getElementById("btn-image");
-    dom.toast = document.getElementById("toast");
-    dom.toastText = document.getElementById("toast-text");
-    dom.btnProfile = document.getElementById("btn-profile");
-    dom.selfAvatar = document.getElementById("self-avatar");
-    dom.btnTheme = document.getElementById("btn-theme");
-    dom.themeIcon = document.getElementById("theme-icon");
-    dom.settings = document.getElementById("settings");
-    dom.settingsClose = document.getElementById("settings-close");
-    dom.setSound = document.getElementById("set-sound");
-    dom.setBg = document.getElementById("set-bg");
-    dom.bgReset = document.getElementById("bg-reset");
-    dom.lightbox = document.getElementById("lightbox");
-    dom.lightboxImg = document.getElementById("lightbox-img");
-
-    dom.form.addEventListener("submit", (e) => { e.preventDefault(); void sendText(); });
-    dom.search.addEventListener("input", () => { state.search = dom.search.value; renderConversations(); });
-    dom.reconnect.addEventListener("click", () => { void reconnect(); });
-    dom.btnImage.addEventListener("click", () => { if (canSend()) dom.fileInput.click(); });
-    dom.fileInput.addEventListener("change", () => {
-      if (dom.fileInput.files && dom.fileInput.files[0]) {
-        void handleFile(dom.fileInput.files[0]);
-      }
-      dom.fileInput.value = "";
-    });
-
-    // 拖拽与粘贴图片。
-    dom.messages.addEventListener("dragover", (e) => e.preventDefault());
-    dom.messages.addEventListener("drop", (e) => {
-      e.preventDefault();
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
-        void handleFile(e.dataTransfer.files[0]);
-      }
-    });
-    document.addEventListener("paste", (e) => {
-      const files = e.clipboardData && e.clipboardData.files;
-      if (files && files[0]) {
-        void handleFile(files[0]);
-      }
-    });
-
-    // 设置 / 深色模式 / 灯箱。
-    dom.btnProfile.addEventListener("click", openSettings);
-    dom.settingsClose.addEventListener("click", closeSettings);
-    dom.settings.addEventListener("click", (e) => { if (e.target === dom.settings) closeSettings(); });
-    dom.setSound.addEventListener("change", () => { state.muted = !dom.setSound.checked; saveSetting("muted", state.muted ? "1" : "0"); });
-    dom.setBg.addEventListener("change", () => {
-      if (dom.setBg.files && dom.setBg.files[0]) {
-        void handleBgFile(dom.setBg.files[0]);
-      }
-      dom.setBg.value = "";
-    });
-    dom.bgReset.addEventListener("click", () => applyBackground(null));
-    dom.btnTheme.addEventListener("click", toggleTheme);
-    dom.lightbox.addEventListener("click", closeLightbox);
-
     initSettings();
-    detectAvatarSprite();
+    void loadRtcConfig();
     renderConversations();
-    renderHeader();
+    syncHeaderUI();
     void init();
+  }
+
+  function chooseFile(p2pOnly) {
+    if (!canSend()) {
+      return;
+    }
+    state.p2pPick = !!p2pOnly;
+    const input = ui && ui.$refs ? ui.$refs.fileInput : null;
+    if (input) {
+      input.click();
+    }
+  }
+
+  function handlePickedFile(input) {
+    if (!input || !input.files || !input.files[0]) {
+      state.p2pPick = false;
+      return;
+    }
+    const file = input.files[0];
+    if (state.p2pPick) {
+      void sendFileP2P(file);
+    } else {
+      void handleFile(file);
+    }
+    state.p2pPick = false;
+    input.value = "";
   }
 
   async function init() {
@@ -164,10 +277,11 @@
     state.unread = {};
     state.active = GROUP;
     state.self = null;
+    rtcReset();
     closeSocket();
     setStatus("连接中", "warn");
     renderConversations();
-    renderHeader();
+    syncHeaderUI();
     renderMessages();
 
     const socket = new WebSocket(websocketURL(state.room));
@@ -245,15 +359,21 @@
     }
     setStatus("已连接", "ok");
     addSystemMessage("已进入群聊「" + state.room + "」，当前 " + memberCountText() + " 人在线。");
+    if (state.nick && state.peers.length > 0) {
+      void sendContent({ k: "p" }, { broadcast: true, silent: true });
+    }
     renderConversations();
   }
 
   function handlePeerLeft(peerID) {
     state.peers = state.peers.filter((p) => p.id !== peerID);
     addSystemMessage("成员 " + shortID(peerID) + " 已离开。");
+    if (rtc.peerId === peerID) {
+      rtcReset();
+    }
     if (state.active === peerID) {
       state.active = GROUP;
-      renderHeader();
+      syncHeaderUI();
       renderMessages();
     }
     renderConversations();
@@ -266,6 +386,11 @@
     } catch {
       return;
     }
+    await routeEnvelope(envelope);
+  }
+
+  // routeEnvelope 尝试用每个已知成员的密钥验证并解密一个信封；中转和 P2P 直连共用。
+  async function routeEnvelope(envelope) {
     for (const peer of state.peers) {
       try {
         if (await tryOpenFromPeer(peer, envelope)) {
@@ -300,7 +425,28 @@
     }
     const json = await decryptFromPeer(peer, envelope);
     peer.lastCounter = ctr;
-    const message = contentToMessage(json, peer.id, shortID(peer.id), false);
+    let content;
+    try {
+      content = JSON.parse(json);
+    } catch {
+      return true;
+    }
+    if (content && typeof content.n === "string") {
+      setPeerName(peer, content.n);
+    }
+    if (content && content.k === "p") {
+      renderConversations();
+      syncHeaderUI();
+      return true;
+    }
+    if (content && content.k === "rtc") {
+      if (envelope.scope !== "dm") {
+        return true;
+      }
+      await handleRtcSignal(peer, content);
+      return true;
+    }
+    const message = contentToMessage(content, peer.id, peerName(peer.id), false);
     if (message) {
       const convoKey = envelope.scope === "dm" ? peer.id : GROUP;
       addChatMessage(convoKey, message);
@@ -342,12 +488,15 @@
         return;
       }
       const dhPublicKey = await crypto.subtle.importKey("raw", dhRaw, { name: "X25519" }, true, []);
-      state.peers.push({ id: peer.id, idVerifyKey, dhPublicKey, lastCounter: 0 });
+      state.peers.push({ id: peer.id, idVerifyKey, dhPublicKey, lastCounter: 0, name: "" });
       if (!state.threads[peer.id]) {
         state.threads[peer.id] = [];
       }
       if (announce) {
         addSystemMessage("成员 " + shortID(peer.id) + " 加入了群聊。");
+        if (state.nick) {
+          void sendContent({ k: "p" }, { toPeerId: peer.id, scope: "group", silent: true });
+        }
       }
       renderConversations();
     } catch (error) {
@@ -358,7 +507,7 @@
   // ---- 发送 ----
 
   async function sendText() {
-    const text = dom.input.value.trim();
+    const text = (ui ? ui.draft : "").trim();
     if (!text || !canSend()) {
       return;
     }
@@ -368,7 +517,9 @@
     }
     const ok = await sendContent({ k: "t", t: text });
     if (ok) {
-      dom.input.value = "";
+      if (ui) {
+        ui.draft = "";
+      }
     }
   }
 
@@ -376,59 +527,87 @@
     if (!canSend()) {
       return;
     }
-    if (!file.type || !file.type.startsWith("image/")) {
-      showToast("目前只支持发送图片");
+    const isImage = !!file.type && file.type.startsWith("image/");
+    if (file.size <= MAX_RELAY_BYTES) {
+      try {
+        const buffer = await file.arrayBuffer();
+        const base64 = bytesToBase64(new Uint8Array(buffer));
+        if (isImage) {
+          await sendContent({ k: "i", m: file.type, d: base64 });
+        } else {
+          await sendContent({ k: "f", m: file.type || "application/octet-stream", fn: file.name || "file", sz: file.size, d: base64 });
+        }
+      } catch (error) {
+        addSystemMessage("文件发送失败：" + safeError(error));
+      }
       return;
     }
-    if (file.size > MAX_IMAGE_BYTES) {
-      showToast("图片太大，请控制在 1.5MB 以内");
+    // 大文件：群聊无法直连，提示改用私聊 P2P；私聊则走 WebRTC 数据通道。
+    if (state.active === GROUP) {
+      showToast("大文件请进入私聊，使用 P2P 直连发送");
       return;
     }
-    try {
-      const buffer = await file.arrayBuffer();
-      const base64 = bytesToBase64(new Uint8Array(buffer));
-      await sendContent({ k: "i", m: file.type, d: base64 });
-    } catch (error) {
-      addSystemMessage("图片发送失败：" + safeError(error));
-    }
+    await sendFileP2P(file);
   }
 
-  async function sendContent(content) {
-    const isGroup = state.active === GROUP;
-    const targets = isGroup ? state.peers : state.peers.filter((p) => p.id === state.active);
+  // sendContent 把一段内容（文本/图片/文件/资料/信令）加密分发给目标成员。
+  // opts.toPeerId 指定单一收件人；opts.broadcast 发给所有成员；否则按当前会话推断。
+  // opts.silent 时不在本地回显（用于资料广播、WebRTC 信令等控制消息）。
+  // 私聊且 P2P 数据通道就绪时，普通消息改走直连通道，不再经服务器中转。
+  async function sendContent(content, opts) {
+    opts = opts || {};
+    let targets;
+    let scope;
+    if (opts.toPeerId) {
+      targets = state.peers.filter((p) => p.id === opts.toPeerId);
+      scope = opts.scope || "dm";
+    } else if (opts.broadcast) {
+      targets = state.peers;
+      scope = GROUP;
+    } else if (state.active === GROUP) {
+      targets = state.peers;
+      scope = GROUP;
+    } else {
+      targets = state.peers.filter((p) => p.id === state.active);
+      scope = "dm";
+    }
     if (targets.length === 0) {
-      addSystemMessage(isGroup ? "群里暂时没有其他人，消息未发送。" : "对方已离线，私聊消息未发送。");
+      if (!opts.silent) {
+        addSystemMessage(scope === GROUP ? "群里暂时没有其他人，消息未发送。" : "对方已离线，消息未发送。");
+      }
       return false;
     }
 
-    const scope = isGroup ? GROUP : "dm";
+    if (state.nick && content.k !== "rtc" && content.k !== "p") {
+      content = Object.assign({}, content, { n: state.nick });
+    } else if (content.k === "p") {
+      content = { k: "p", n: state.nick };
+    }
+
     const ctr = ++state.sendCounter;
     const ts = Date.now();
     const bytes = textEncoder.encode(JSON.stringify(content));
     const padded = padPlaintext(bytes);
     try {
-      if (content.k === "i") {
-        // 图片密文较大，按收件人拆成单独的帧，避免单帧超过服务端大小上限。
-        for (const peer of targets) {
-          const envelope = await sealForPeer(peer, padded, ctr, ts, scope);
+      for (const peer of targets) {
+        const envelope = await sealForPeer(peer, padded, ctr, ts, scope);
+        if (scope === "dm" && content.k !== "rtc" && rtcConnected(peer.id)) {
+          rtc.channel.send(JSON.stringify({ t: "msg", e: envelope }));
+        } else {
           state.socket.send(JSON.stringify({ type: "send", messages: [{ dest: peer.id, payload: envelope }] }));
         }
-      } else {
-        const messages = [];
-        for (const peer of targets) {
-          messages.push({ dest: peer.id, payload: await sealForPeer(peer, padded, ctr, ts, scope) });
-        }
-        state.socket.send(JSON.stringify({ type: "send", messages }));
       }
     } finally {
       wipeBytes(bytes);
       wipeBytes(padded);
     }
 
-    const selfID = state.self ? state.self.id : "self";
-    const own = contentToMessage(JSON.stringify(content), selfID, "我", true);
-    if (own) {
-      addChatMessage(state.active, own);
+    if (!opts.silent) {
+      const selfID = state.self ? state.self.id : "self";
+      const own = contentToMessage(content, selfID, selfName(), true);
+      if (own) {
+        addChatMessage(opts.toPeerId || state.active, own);
+      }
     }
     return true;
   }
@@ -453,12 +632,9 @@
     return JSON.stringify(envelope);
   }
 
-  // contentToMessage 把解密出的 JSON 内容转成可渲染的消息对象，并做基本校验。
-  function contentToMessage(json, from, author, fromSelf) {
-    let content;
-    try {
-      content = JSON.parse(json);
-    } catch {
+  // contentToMessage 把解密出的内容对象转成可渲染的消息对象，并做基本校验。
+  function contentToMessage(content, from, author, fromSelf) {
+    if (!content || typeof content !== "object") {
       return null;
     }
     const base = { id: 0, system: false, fromSelf, from, author, time: formatTime(new Date()) };
@@ -468,6 +644,9 @@
     if (content.k === "i" && typeof content.m === "string" && /^image\//.test(content.m) && typeof content.d === "string") {
       return Object.assign(base, { kind: "image", mime: content.m, data: content.d });
     }
+    if (content.k === "f" && typeof content.m === "string" && typeof content.fn === "string" && typeof content.d === "string") {
+      return Object.assign(base, { kind: "file", mime: content.m, name: content.fn, size: Number(content.sz) || 0, data: content.d });
+    }
     return null;
   }
 
@@ -476,13 +655,64 @@
   function selectConversation(key) {
     state.active = key;
     state.unread[key] = 0;
+    if (key === GROUP) {
+      scheduleRtcIdleClose();
+    } else if (rtc.peerId && rtc.peerId !== key) {
+      rtcReset();
+    } else {
+      cancelRtcIdleClose();
+    }
     renderConversations();
-    renderHeader();
+    syncHeaderUI();
     renderMessages();
+    maybeAutoUpgrade(key);
+  }
+
+  // maybeAutoUpgrade 进入私聊时自动尝试把会话升级为 P2P 直连：
+  // ID 较大的一方主动发起，较小的一方发请求让对方发起（避免双方同时 offer）。
+  function maybeAutoUpgrade(key) {
+    if (key === GROUP || !canSend()) {
+      return;
+    }
+    if ((rtc.state === P2P_STATE.CONNECTED || rtc.connecting || rtc.pc) && rtc.peerId === key) {
+      return;
+    }
+    const peer = state.peers.find((p) => p.id === key);
+    if (!peer) {
+      return;
+    }
+    const selfID = state.self ? state.self.id : "";
+    if (selfID > key) {
+      void startP2P(key);
+    } else {
+      void requestP2P(key);
+    }
   }
 
   function conversationTitle() {
-    return state.active === GROUP ? "群聊「" + state.room + "」" : shortID(state.active) + " · 私聊";
+    return state.active === GROUP ? "群聊「" + state.room + "」" : peerName(state.active) + " · 私聊";
+  }
+
+  // peerName 返回成员的显示名：优先对方设置的昵称，否则回退匿名短 ID。
+  function peerName(id) {
+    if (id === GROUP) {
+      return "群聊";
+    }
+    const peer = state.peers.find((p) => p.id === id);
+    return (peer && peer.name) ? peer.name : shortID(id);
+  }
+
+  function selfName() {
+    return state.nick || "我";
+  }
+
+  function setPeerName(peer, raw) {
+    const name = String(raw || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, MAX_NICK_LEN);
+    if (peer.name !== name) {
+      peer.name = name;
+      renderConversations();
+      syncHeaderUI();
+    }
   }
 
   function filteredPeers() {
@@ -490,7 +720,7 @@
     if (!q) {
       return state.peers;
     }
-    return state.peers.filter((p) => shortID(p.id).toLowerCase().includes(q));
+    return state.peers.filter((p) => peerName(p.id).toLowerCase().includes(q) || shortID(p.id).toLowerCase().includes(q));
   }
 
   function threadPreview(key) {
@@ -498,7 +728,7 @@
     for (let i = list.length - 1; i >= 0; i -= 1) {
       const m = list[i];
       if (!m.system) {
-        const body = m.kind === "image" ? "[图片]" : m.text;
+        const body = m.kind === "image" ? "[图片]" : m.kind === "file" ? "[文件] " + (m.name || "") : m.text;
         return (m.fromSelf ? "我: " : "") + body;
       }
     }
@@ -518,15 +748,20 @@
       state.unread[convoKey] = (state.unread[convoKey] || 0) + 1;
     }
     renderConversations();
+    return message;
   }
 
-  function addSystemMessage(text) {
-    state.threads[GROUP].push({
+  function addSystemMessage(text, convoKey) {
+    const key = convoKey || GROUP;
+    if (!state.threads[key]) {
+      state.threads[key] = [];
+    }
+    state.threads[key].push({
       id: state.nextMessageID++, system: true, fromSelf: false,
       from: "system", author: "系统", kind: "text", text: text, time: formatTime(new Date()),
     });
-    trimThread(GROUP);
-    if (state.active === GROUP) {
+    trimThread(key);
+    if (state.active === key) {
       renderMessages();
     }
     renderConversations();
@@ -547,201 +782,178 @@
     return String(state.peers.length + (state.self ? 1 : 0));
   }
 
-  // ---- 渲染 ----
-
-  function setStatus(text, tone) {
-    state.statusTone = tone;
-    if (dom.statusText) {
-      dom.statusText.textContent = text;
-    }
-    if (dom.statusDot) {
-      dom.statusDot.className = "inline-block size-2 rounded-full " +
-        (tone === "ok" ? "bg-success" : tone === "bad" ? "bg-error" : "bg-warning");
-    }
-    updateSendable();
+  function syncUI() {
+    syncSettingsUI();
+    renderSelfAvatar();
+    renderConversations();
+    syncHeaderUI();
+    renderMessages();
   }
 
-  function updateSendable() {
-    const ok = canSend();
-    if (dom.input) {
-      dom.input.disabled = !ok;
-      dom.input.placeholder = state.active === GROUP ? "群聊消息，本地加密后发送" : "私聊消息，仅对方可解密";
-    }
-    if (dom.sendBtn) {
-      dom.sendBtn.disabled = !ok;
-    }
-    if (dom.btnImage) {
-      dom.btnImage.disabled = !ok;
-    }
-  }
-
-  function renderHeader() {
-    if (dom.convoTitle) {
-      dom.convoTitle.textContent = conversationTitle();
-    }
-    updateSendable();
-  }
-
-  function avatarEl(id, initials, big) {
-    const el = document.createElement("span");
-    el.className = (big ? "size-11" : "size-9") +
-      " grid shrink-0 place-items-center rounded-full text-xs font-extrabold uppercase text-white select-none";
-    el.textContent = initials;
-    const hue = colorHue(id || "");
-    el.style.background = "linear-gradient(135deg, hsl(" + hue + " 70% 38%), hsl(" + ((hue + 36) % 360) + " 78% 50%))";
-    applyAvatarSprite(el, id || "");
-    return el;
-  }
-
-  function convoButton(opts) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "flex items-center gap-3 px-3.5 py-2.5 text-left text-white shrink-0 w-60 md:w-auto hover:bg-white/10" +
-      (opts.active ? " bg-white/20" : "");
-    btn.addEventListener("click", opts.onClick);
-
-    if (opts.groupBadge) {
-      const g = document.createElement("span");
-      g.className = "size-11 grid shrink-0 place-items-center rounded-full bg-white/25 text-white font-extrabold";
-      g.textContent = "群";
-      btn.appendChild(g);
-    } else {
-      btn.appendChild(avatarEl(opts.id, opts.initials, true));
-    }
-
-    const body = document.createElement("span");
-    body.className = "min-w-0 flex-1";
-    const top = document.createElement("span");
-    top.className = "flex items-center justify-between gap-2";
-    const name = document.createElement("strong");
-    name.className = "text-sm truncate";
-    name.textContent = opts.title;
-    top.appendChild(name);
-    if (opts.unread > 0) {
-      const badge = document.createElement("span");
-      badge.className = "badge badge-xs badge-error";
-      badge.textContent = String(opts.unread);
-      top.appendChild(badge);
-    }
-    const preview = document.createElement("small");
-    preview.className = "block text-xs text-white/60 truncate";
-    preview.textContent = opts.preview;
-    body.appendChild(top);
-    body.appendChild(preview);
-    btn.appendChild(body);
-    return btn;
-  }
-
-  function renderConversations() {
-    if (!dom.convoList) {
+  function syncSettingsUI() {
+    if (!ui) {
       return;
     }
-    dom.convoList.replaceChildren();
+    ui.nick = state.nick;
+    ui.soundOn = !state.muted;
+    ui.tone = state.tone;
+    ui.stun = state.stun;
+    ui.theme = document.documentElement.dataset.theme || "pptter";
+    ui.isDark = isDarkTheme(ui.theme);
+    ui.backgroundImage = state.backgroundImage;
+  }
 
-    dom.convoList.appendChild(convoButton({
-      groupBadge: true,
+  function syncHeaderUI() {
+    if (!ui) {
+      return;
+    }
+    const inDM = state.active !== GROUP;
+    const connected = inDM && rtcConnected(state.active);
+    const connecting = inDM && rtc.connecting && rtc.peerId === state.active;
+    ui.active = state.active;
+    ui.convoTitle = conversationTitle();
+    ui.statusText = statusDisplayText();
+    ui.statusDotClass = connecting ? "bg-warning" : state.statusTone === "ok" ? "bg-success" : state.statusTone === "bad" ? "bg-error" : "bg-warning";
+    ui.sendDisabled = !canSend();
+    ui.inputPlaceholder = state.active === GROUP ? "群聊消息，本地加密后发送" : "私聊消息，仅对方可解密";
+    ui.p2pHidden = !inDM;
+    ui.p2pConnected = connected;
+    ui.p2pTitle = connected ? "P2P 直连已建立，点击发送大文件" : connecting ? "P2P 打洞中…" : "建立 P2P 直连（大文件）";
+  }
+
+  function statusDisplayText() {
+    if (state.statusTone !== "ok") {
+      return state.statusText;
+    }
+    if (state.active === GROUP) {
+      return "群聊 · 端到端加密 (X25519·Ed25519)";
+    }
+    if (rtcConnected(state.active)) {
+      return "P2P 直连 · 端到端加密";
+    }
+    if (rtc.connecting && rtc.peerId === state.active) {
+      return (rtc.loadingLabel || "P2P 打洞中") + " " + (rtc.loadingFrame || "/");
+    }
+    if (rtc.state === P2P_STATE.FAILED && rtc.peerId === state.active) {
+      return "P2P 直连失败 · 私聊端到端加密";
+    }
+    if (rtc.state === P2P_STATE.CLOSED && rtc.peerId === state.active) {
+      return "P2P 已断开 · 私聊端到端加密";
+    }
+    return "私聊 · 端到端加密 (X25519·Ed25519)";
+  }
+
+  function conversationViews() {
+    const list = [{
+      key: GROUP,
+      isGroup: true,
       title: "群聊 (" + memberCountText() + ")",
       preview: threadPreview(GROUP),
       unread: state.unread[GROUP] || 0,
-      active: state.active === GROUP,
-      onClick: () => selectConversation(GROUP),
-    }));
+    }];
 
     for (const peer of filteredPeers()) {
-      dom.convoList.appendChild(convoButton({
-        id: peer.id,
-        initials: shortID(peer.id).slice(0, 2),
-        title: shortID(peer.id),
+      const avatar = avatarModel(peer.id, shortID(peer.id).slice(0, 2));
+      list.push({
+        key: peer.id,
+        isGroup: false,
+        title: peerName(peer.id),
         preview: threadPreview(peer.id),
         unread: state.unread[peer.id] || 0,
-        active: state.active === peer.id,
-        onClick: () => selectConversation(peer.id),
-      }));
+        text: avatar.text,
+        avatarClass: avatar.avatarClass,
+      });
     }
 
-    if (state.peers.length === 0) {
-      const empty = document.createElement("div");
-      empty.className = "px-3.5 py-2 text-xs text-white/70 shrink-0";
-      empty.textContent = "还没有其他成员在线";
-      dom.convoList.appendChild(empty);
-    }
+    return list;
   }
 
-  function messageEl(message) {
-    const wrap = document.createElement("div");
+  function messageView(message) {
     if (message.system) {
-      const center = document.createElement("div");
-      center.className = "flex justify-center my-2";
-      const badge = document.createElement("span");
-      badge.className = "badge badge-ghost badge-sm max-w-[85%] h-auto py-1 whitespace-normal text-center text-base-content/70";
-      badge.textContent = message.text;
-      center.appendChild(badge);
-      wrap.appendChild(center);
-      return wrap;
+      return { id: message.id, system: true, text: message.text };
     }
 
-    const chat = document.createElement("div");
-    chat.className = "chat " + (message.fromSelf ? "chat-end" : "chat-start");
+    const avatar = avatarModel(message.from, shortID(message.from).slice(0, 2));
+    const isImage = message.kind === "image";
+    const isFile = message.kind === "file";
+    const transfer = message.transfer || null;
+    const href = isFile ? (message.url || ("data:" + message.mime + ";base64," + message.data)) : "";
+    const src = isImage ? (message.url || ("data:" + message.mime + ";base64," + message.data)) : "";
+    const canDownload = isFile && !!href && (!transfer || transfer.status === TRANSFER_STATUS.DONE);
+    return {
+      id: message.id,
+      system: false,
+      chatClass: "chat " + (message.fromSelf ? "chat-end" : "chat-start"),
+      avatarClass: avatar.avatarClass,
+      avatarText: avatar.text,
+      author: message.author,
+      timeText: message.time,
+      bubbleClass: "chat-bubble" + (message.fromSelf ? " chat-bubble-accent" : "") + (isImage || isFile ? " is-media" : ""),
+      isText: message.kind === "text",
+      isImage: isImage,
+      isFile: isFile,
+      isTransfer: !!transfer,
+      text: message.text || "",
+      src: src,
+      href: href,
+      name: message.name || "文件",
+      meta: isFile ? fileMeta(message) : "",
+      downloadTitle: isFile ? "下载 " + (message.name || "") : "",
+      canDownload: canDownload,
+      progress: transfer ? transfer.percent : 0,
+      progressText: transfer ? transfer.label : "",
+      canCancel: !!(transfer && transfer.canCancel),
+      canRetry: !!(transfer && transfer.canRetry),
+    };
+  }
 
-    const image = document.createElement("div");
-    image.className = "chat-image";
-    image.appendChild(avatarEl(message.from, shortID(message.from).slice(0, 2), false));
-
-    const head = document.createElement("div");
-    head.className = "chat-header text-xs opacity-80 gap-1";
-    const author = document.createElement("span");
-    author.textContent = message.author;
-    const time = document.createElement("time");
-    time.className = "opacity-60";
-    time.textContent = " " + message.time;
-    head.appendChild(author);
-    head.appendChild(time);
-
-    const bubble = document.createElement("div");
-    bubble.className = "chat-bubble" + (message.fromSelf ? " chat-bubble-accent" : "");
-    if (message.kind === "image") {
-      const img = document.createElement("img");
-      img.className = "rounded-lg max-w-[min(70vw,18rem)] max-h-[18rem] h-auto w-auto cursor-zoom-in";
-      img.alt = "图片";
-      img.loading = "lazy";
-      const src = "data:" + message.mime + ";base64," + message.data;
-      img.src = src;
-      img.addEventListener("click", () => openLightbox(src));
-      bubble.classList.add("p-1", "max-w-full");
-      bubble.appendChild(img);
-    } else {
-      bubble.textContent = message.text;
+  function fileMeta(message) {
+    const base = humanSize(message.size) + (message.p2p ? " · P2P 直传" : "");
+    if (message.transfer && message.transfer.label) {
+      return base + " · " + message.transfer.label;
     }
+    return base + " · 点击下载";
+  }
 
-    chat.appendChild(image);
-    chat.appendChild(head);
-    chat.appendChild(bubble);
-    wrap.appendChild(chat);
-    return wrap;
+  function avatarModel(id, fallbackText) {
+    const avatarNumber = avatarIndex(id || "");
+    return {
+      text: "",
+      avatarClass: "avatar-sprite avatar-pos-" + avatarNumber,
+      fallbackText: fallbackText,
+    };
+  }
+
+  // ---- 渲染 ----
+
+  function setStatus(text, tone) {
+    state.statusText = text;
+    state.statusTone = tone;
+    syncHeaderUI();
+  }
+
+  function renderConversations() {
+    if (ui) {
+      ui.conversations = conversationViews();
+      ui.hasPeers = state.peers.length > 0;
+      ui.active = state.active;
+    }
   }
 
   function renderMessages() {
-    if (!dom.messages) {
-      return;
-    }
     const list = state.threads[state.active] || [];
-    dom.messages.replaceChildren();
-    for (const message of list) {
-      dom.messages.appendChild(messageEl(message));
+    if (ui) {
+      ui.messages = list.map(messageView);
     }
-    requestAnimationFrame(() => {
-      dom.messages.scrollTop = dom.messages.scrollHeight;
-    });
   }
 
   function showToast(text) {
-    if (!dom.toast) {
-      return;
+    if (ui) {
+      ui.toastText = text;
+      ui.toastShown = true;
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => { if (ui) ui.toastShown = false; }, 1800);
     }
-    dom.toastText.textContent = text;
-    dom.toast.classList.remove("hidden");
-    window.clearTimeout(toastTimer);
-    toastTimer = window.setTimeout(() => dom.toast.classList.add("hidden"), 1800);
   }
 
   // ---- 设置 / 深色模式 / 灯箱 / 提示音 ----
@@ -765,48 +977,61 @@
   function initSettings() {
     const stored = lsGet("theme");
     const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-    applyTheme(stored || (prefersDark ? "pptter-dark" : "pptter"));
+    applyTheme(THEMES.includes(stored) ? stored : (prefersDark ? "pptter-dark" : "pptter"));
 
     state.muted = lsGet("muted") === "1";
-    if (dom.setSound) {
-      dom.setSound.checked = !state.muted;
-    }
+
+    state.nick = (lsGet("nick") || "").slice(0, MAX_NICK_LEN);
+
+    const tone = lsGet("tone");
+    state.tone = (tone && TONES[tone]) ? tone : "soft";
+
+    state.stun = (lsGet("stun") || "").trim();
+    syncSettingsUI();
 
     const bg = lsGet("bg");
     if (bg) {
       applyBackground(bg, true);
     }
+  }
 
-    // 浏览器自动播放策略：首次用户交互后才允许音频。
-    document.addEventListener("pointerdown", ensureAudio, { once: true });
+  // setNick 更新本地昵称并向所有在线成员广播一次加密的资料帧。
+  function setNick(raw) {
+    const name = String(raw || "").replace(/[\u0000-\u001f]/g, "").trim().slice(0, MAX_NICK_LEN);
+    state.nick = name;
+    saveSetting("nick", name);
+    if (ui) {
+      ui.nick = name;
+    }
+    renderSelfAvatar();
+    renderConversations();
+    if (canSend() && state.peers.length > 0) {
+      void sendContent({ k: "p" }, { broadcast: true, silent: true });
+    }
+    showToast(name ? "昵称已更新" : "已清除昵称");
   }
 
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
     saveSetting("theme", theme);
-    setThemeIcon(theme);
-  }
-
-  function setThemeIcon(theme) {
-    if (!dom.themeIcon) {
-      return;
+    if (ui) {
+      ui.theme = theme;
+      ui.isDark = isDarkTheme(theme);
     }
-    dom.themeIcon.innerHTML = theme === "pptter-dark"
-      ? '<circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>'
-      : '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>';
   }
 
   // toggleTheme：用 View Transitions API 从按钮位置以圆形遮罩扩散到整页。
   function toggleTheme(event) {
-    const current = document.documentElement.dataset.theme === "pptter-dark" ? "pptter-dark" : "pptter";
+    const currentTheme = document.documentElement.dataset.theme || "pptter";
+    const current = isDarkTheme(currentTheme) ? "pptter-dark" : "pptter";
     const next = current === "pptter-dark" ? "pptter" : "pptter-dark";
     const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!document.startViewTransition || reduced) {
       applyTheme(next);
       return;
     }
-    const x = event.clientX;
-    const y = event.clientY;
+    const x = event && Number.isFinite(event.clientX) ? event.clientX : Math.round(innerWidth / 2);
+    const y = event && Number.isFinite(event.clientY) ? event.clientY : Math.round(innerHeight / 2);
     const endRadius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
     const transition = document.startViewTransition(() => applyTheme(next));
     transition.ready.then(() => {
@@ -816,28 +1041,756 @@
     });
   }
 
-  function openSettings() {
-    if (dom.settings) {
-      dom.settings.classList.remove("hidden");
+  // fingerprint 返回本机身份公钥的短指纹，供成员带外核对、防中间人。
+  async function fingerprint() {
+    if (!state.idKeyB64 || !window.crypto || !window.crypto.subtle) {
+      return "—";
+    }
+    try {
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", base64ToBytes(state.idKeyB64)));
+      const hex = Array.from(digest.slice(0, 16)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      return hex.replace(/(.{4})/g, "$1 ").trim();
+    } catch {
+      return "—";
     }
   }
 
-  function closeSettings() {
-    if (dom.settings) {
-      dom.settings.classList.add("hidden");
+  // ---- WebRTC P2P：仅当前私聊，用于大文件直传与消息直连，信令走既有端到端加密通道。 ----
+
+  function rtcConfig() {
+    const servers = [];
+    if (Array.isArray(state.iceServers)) {
+      servers.push(...state.iceServers);
     }
+    if (state.stun) {
+      servers.push({ urls: state.stun });
+    }
+    return { iceServers: servers };
+  }
+
+  // loadRtcConfig 向后端拉取自建 STUN 服务信息，构造 ICE 配置。
+  // 后端返回 {enabled, stunPort, stunHost?}；STUN 地址默认用当前主机名 + 该端口，
+  // 因此跨网络也能尝试反射地址，而不引入任何第三方服务。
+  async function loadRtcConfig() {
+    try {
+      const res = await fetch("/webrtc-config", { cache: "no-store" });
+      if (!res.ok) {
+        state.iceServers = [];
+        return;
+      }
+      const cfg = await res.json();
+      if (cfg && cfg.enabled && cfg.stunPort) {
+        const host = (cfg.stunHost && String(cfg.stunHost)) || location.hostname;
+        const url = stunURL(host, cfg.stunPort);
+        state.iceServers = url ? [{ urls: url }] : [];
+      } else {
+        state.iceServers = [];
+      }
+    } catch {
+      state.iceServers = [];
+    }
+  }
+
+  function setRtcState(nextState, peerId, label) {
+    cancelRtcIdleClose();
+    if (peerId) {
+      rtc.peerId = peerId;
+    }
+    rtc.state = nextState;
+    rtc.ready = nextState === P2P_STATE.CONNECTED;
+    rtc.connecting = nextState === P2P_STATE.REQUESTING || nextState === P2P_STATE.OFFERING || nextState === P2P_STATE.ANSWERING;
+    if (rtc.connecting) {
+      startP2PLoading(rtc.peerId, label || p2pStateLabel(nextState));
+    } else {
+      stopP2PLoading(false);
+    }
+    if (state.active === GROUP && (nextState === P2P_STATE.CONNECTED || rtc.connecting)) {
+      scheduleRtcIdleClose();
+    }
+    syncHeaderUI();
+  }
+
+  function p2pStateLabel(nextState) {
+    if (nextState === P2P_STATE.REQUESTING) {
+      return "等待对方发起 P2P";
+    }
+    if (nextState === P2P_STATE.ANSWERING) {
+      return "正在响应 P2P";
+    }
+    return "P2P 打洞中";
+  }
+
+  function startP2PLoading(peerId, label) {
+    if (!peerId || peerId === GROUP) {
+      return;
+    }
+    rtc.peerId = peerId;
+    rtc.connecting = true;
+    rtc.loadingLabel = label || rtc.loadingLabel || "P2P 打洞中";
+    rtc.loadingIndex = 0;
+    rtc.loadingFrame = P2P_LOADING_FRAMES[0];
+    if (!rtc.loadingTimer) {
+      rtc.loadingTimer = window.setInterval(() => {
+        if (!rtc.connecting) {
+          stopP2PLoading();
+          return;
+        }
+        rtc.loadingIndex = (rtc.loadingIndex + 1) % P2P_LOADING_FRAMES.length;
+        rtc.loadingFrame = P2P_LOADING_FRAMES[rtc.loadingIndex];
+        syncHeaderUI();
+      }, 180);
+    }
+    syncHeaderUI();
+  }
+
+  function stopP2PLoading(sync) {
+    if (rtc.loadingTimer) {
+      window.clearInterval(rtc.loadingTimer);
+      rtc.loadingTimer = 0;
+    }
+    rtc.connecting = false;
+    rtc.loadingLabel = "";
+    rtc.loadingIndex = 0;
+    rtc.loadingFrame = P2P_LOADING_FRAMES[0];
+    if (sync !== false) {
+      syncHeaderUI();
+    }
+  }
+
+  function rtcConnected(peerId) {
+    return rtc.state === P2P_STATE.CONNECTED && rtc.ready && rtc.peerId === peerId && rtc.channel && rtc.channel.readyState === "open";
+  }
+
+  function cancelRtcIdleClose() {
+    if (rtc.idleTimer) {
+      window.clearTimeout(rtc.idleTimer);
+      rtc.idleTimer = 0;
+    }
+  }
+
+  function scheduleRtcIdleClose() {
+    cancelRtcIdleClose();
+    if (!rtc.peerId || rtc.state === P2P_STATE.IDLE || rtc.state === P2P_STATE.CLOSED || rtc.state === P2P_STATE.FAILED) {
+      return;
+    }
+    rtc.idleTimer = window.setTimeout(() => {
+      if (state.active === GROUP && rtc.peerId) {
+        addSystemMessage("P2P 直连已空闲回收。", rtc.peerId);
+        rtcReset();
+      }
+    }, P2P_IDLE_KEEPALIVE_MS);
+  }
+
+  function closeRtcObjects() {
+    failActiveTransfers("连接断开");
+    if (rtc.channel) {
+      try { rtc.channel.close(); } catch { /* 忽略 */ }
+    }
+    if (rtc.pc) {
+      try { rtc.pc.close(); } catch { /* 忽略 */ }
+    }
+    rtc.pc = null;
+    rtc.channel = null;
+    rtc.ready = false;
+    rtc.recv = null;
+    rtc.sending = null;
+  }
+
+  function failActiveTransfers(reason) {
+    if (rtc.sending && rtc.sending.message) {
+      updateTransfer(rtc.sending.message, { status: TRANSFER_STATUS.FAILED, error: reason || "连接断开" });
+    }
+    if (rtc.recv && rtc.recv.message) {
+      updateTransfer(rtc.recv.message, { status: TRANSFER_STATUS.FAILED, error: reason || "连接断开" });
+    }
+  }
+
+  function rtcReset() {
+    cancelRtcIdleClose();
+    stopP2PLoading(false);
+    closeRtcObjects();
+    rtc.peerId = null;
+    rtc.state = P2P_STATE.IDLE;
+    rtc.connecting = false;
+    for (const item of rtc.queue) {
+      if (item.message) {
+        updateTransfer(item.message, { status: TRANSFER_STATUS.FAILED, error: "连接已切换" });
+      }
+    }
+    rtc.queue = [];
+    updateP2pButton();
+    syncHeaderUI();
+  }
+
+  async function announceP2PConnected(peerId, channel) {
+    const details = await safeP2PConnectionDetails(peerId, channel);
+    logP2PEvent("connected", details);
+  }
+
+  async function safeP2PConnectionDetails(peerId, channel) {
+    const pc = rtc.pc && rtc.peerId === peerId ? rtc.pc : null;
+    const details = {
+      peer: shortID(peerId),
+      dataChannelState: channel ? channel.readyState : "unknown",
+      connectionState: pc ? pc.connectionState : "unknown",
+      iceConnectionState: pc ? pc.iceConnectionState : "unknown",
+      iceGatheringState: pc ? pc.iceGatheringState : "unknown",
+      signalingState: pc ? pc.signalingState : "unknown",
+    };
+    if (!pc || typeof pc.getStats !== "function") {
+      return details;
+    }
+    try {
+      const report = await pc.getStats();
+      let selectedPair = null;
+      report.forEach((stat) => {
+        if (stat.type === "candidate-pair" && stat.state === "succeeded" && (stat.selected || stat.nominated)) {
+          selectedPair = stat;
+        }
+      });
+      if (!selectedPair) {
+        return details;
+      }
+      const local = selectedPair.localCandidateId ? report.get(selectedPair.localCandidateId) : null;
+      const remote = selectedPair.remoteCandidateId ? report.get(selectedPair.remoteCandidateId) : null;
+      if (local && local.candidateType) {
+        details.localCandidateType = local.candidateType;
+      }
+      if (remote && remote.candidateType) {
+        details.remoteCandidateType = remote.candidateType;
+      }
+      if (local && local.protocol) {
+        details.protocol = local.protocol;
+      }
+      if (Number.isFinite(selectedPair.currentRoundTripTime)) {
+        details.rttMs = Math.round(selectedPair.currentRoundTripTime * 1000);
+      }
+    } catch {
+      // 统计信息不可用时仍保留连接状态日志。
+    }
+    return details;
+  }
+
+  function logP2PEvent(event, details) {
+    if (window.console && typeof window.console.info === "function") {
+      window.console.info("[pptter:p2p]", Object.assign({ event: event }, details));
+    }
+  }
+
+  function ensurePeerConnection(peerId, initiator) {
+    if (rtc.pc && rtc.peerId !== peerId) {
+      rtcReset();
+    }
+    if (rtc.pc) {
+      return rtc.pc;
+    }
+    rtc.peerId = peerId;
+    const pc = new RTCPeerConnection(rtcConfig());
+    rtc.pc = pc;
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        void sendContent({ k: "rtc", s: "ice", c: JSON.stringify(event.candidate) }, { toPeerId: peerId, silent: true });
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      const s = pc.connectionState;
+      if (s === "failed" || s === "disconnected" || s === "closed") {
+        if (rtc.peerId === peerId) {
+          const nextState = s === "failed" ? P2P_STATE.FAILED : P2P_STATE.CLOSED;
+          setRtcState(nextState, peerId);
+          addSystemMessage("P2P 直连已断开。", peerId);
+          logP2PEvent("closed", {
+            peer: shortID(peerId),
+            connectionState: pc.connectionState,
+            iceConnectionState: pc.iceConnectionState,
+          });
+          closeRtcObjects();
+        }
+      }
+      updateP2pButton();
+    };
+    pc.ondatachannel = (event) => setupChannel(event.channel, peerId);
+    if (initiator) {
+      setupChannel(pc.createDataChannel("p2p", { ordered: true }), peerId);
+    }
+    return pc;
+  }
+
+  function setupChannel(channel, peerId) {
+    rtc.channel = channel;
+    channel.binaryType = "arraybuffer";
+    channel.bufferedAmountLowThreshold = 1 << 20;
+    channel.onopen = () => {
+      if (rtc.peerId !== peerId) {
+        return;
+      }
+      setRtcState(P2P_STATE.CONNECTED, peerId);
+      void announceP2PConnected(peerId, channel);
+      updateP2pButton();
+      syncHeaderUI();
+      flushQueue();
+    };
+    channel.onclose = () => {
+      if (rtc.peerId !== peerId) {
+        return;
+      }
+      setRtcState(P2P_STATE.CLOSED, peerId);
+      updateP2pButton();
+      syncHeaderUI();
+    };
+    channel.onmessage = (event) => {
+      if (rtc.peerId === peerId) {
+        handleChannelData(event.data);
+      }
+    };
+  }
+
+  async function startP2P(peerId) {
+    if (!peerId || peerId === GROUP) {
+      return;
+    }
+    if (rtcConnected(peerId) || (rtc.pc && rtc.peerId === peerId && rtc.state !== P2P_STATE.FAILED && rtc.state !== P2P_STATE.CLOSED)) {
+      return;
+    }
+    if (rtc.pc && rtc.peerId !== peerId) {
+      rtcReset();
+    }
+    if (rtc.pc && rtc.peerId === peerId) {
+      rtcReset();
+    }
+    ensureAudio();
+    try {
+      setRtcState(P2P_STATE.OFFERING, peerId, "P2P 打洞中");
+      const pc = ensurePeerConnection(peerId, true);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await sendContent({ k: "rtc", s: "offer", sdp: pc.localDescription.sdp }, { toPeerId: peerId, silent: true });
+    } catch (error) {
+      setRtcState(P2P_STATE.FAILED, peerId);
+      addSystemMessage("发起 P2P 失败：" + safeError(error), peerId);
+      closeRtcObjects();
+    }
+  }
+
+  async function requestP2P(peerId) {
+    if (!peerId || peerId === GROUP || rtcConnected(peerId)) {
+      return;
+    }
+    const selfID = state.self ? state.self.id : "";
+    if (selfID > peerId) {
+      await startP2P(peerId);
+      return;
+    }
+    if ((rtc.connecting || rtc.pc) && rtc.peerId === peerId) {
+      return;
+    }
+    setRtcState(P2P_STATE.REQUESTING, peerId, "等待对方发起 P2P");
+    await sendContent({ k: "rtc", s: "req" }, { toPeerId: peerId, silent: true });
+  }
+
+  async function handleRtcSignal(peer, content) {
+    const peerId = peer.id;
+    // 只允许当前私聊或已存在的单条热连接继续处理信令；
+    // 切到群聊时不中断既有 P2P，但也不会为其它成员新建连接，避免 N²。
+    if (state.active !== peerId && rtc.peerId !== peerId) {
+      return;
+    }
+    try {
+      if (content.s === "req") {
+        // 对方请求建立直连：由 ID 较大的一方发起，避免双方同时发 offer 造成 glare。
+        const selfID = state.self ? state.self.id : "";
+        if (selfID > peerId && !rtcConnected(peerId) && !(rtc.pc && rtc.peerId === peerId)) {
+          await startP2P(peerId);
+        }
+      } else if (content.s === "offer") {
+        if (rtc.pc && rtc.peerId !== peerId) {
+          rtcReset();
+        }
+        setRtcState(P2P_STATE.ANSWERING, peerId, "正在响应 P2P");
+        const pc = ensurePeerConnection(peerId, false);
+        await pc.setRemoteDescription({ type: "offer", sdp: content.sdp });
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await sendContent({ k: "rtc", s: "answer", sdp: pc.localDescription.sdp }, { toPeerId: peerId, silent: true });
+      } else if (content.s === "answer") {
+        if (rtc.pc && rtc.peerId === peerId) {
+          await rtc.pc.setRemoteDescription({ type: "answer", sdp: content.sdp });
+        }
+      } else if (content.s === "ice") {
+        if (rtc.pc && rtc.peerId === peerId && content.c) {
+          try { await rtc.pc.addIceCandidate(JSON.parse(content.c)); } catch { /* 候选迟到忽略 */ }
+        }
+      }
+    } catch (error) {
+      addSystemMessage("P2P 协商失败：" + safeError(error), peerId);
+    }
+  }
+
+  async function p2pButtonClick() {
+    if (state.active === GROUP || !canSend()) {
+      return;
+    }
+    if (rtcConnected(state.active)) {
+      chooseFile(true);
+    } else {
+      await requestP2P(state.active);
+    }
+  }
+
+  function updateP2pButton() {
+    syncHeaderUI();
+  }
+
+  // ---- P2P 数据通道：传文件与转发端到端加密信封。 ----
+
+  function transferID() {
+    if (crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    const bytes = crypto.getRandomValues(new Uint8Array(12));
+    return Array.from(bytes).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  function checksumStart() {
+    return 0x811c9dc5;
+  }
+
+  function checksumUpdate(hash, bytes) {
+    let next = hash >>> 0;
+    for (let index = 0; index < bytes.length; index += 1) {
+      next ^= bytes[index];
+      next = Math.imul(next, 0x01000193) >>> 0;
+    }
+    return next;
+  }
+
+  function checksumHex(hash) {
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  }
+
+  function transferLabel(transfer) {
+    const percent = Math.max(0, Math.min(100, transfer.percent || 0));
+    if (transfer.status === TRANSFER_STATUS.QUEUED) {
+      return "等待 P2P 连接";
+    }
+    if (transfer.status === TRANSFER_STATUS.SENDING) {
+      return "发送中 " + percent + "%";
+    }
+    if (transfer.status === TRANSFER_STATUS.RECEIVING) {
+      return "接收中 " + percent + "%";
+    }
+    if (transfer.status === TRANSFER_STATUS.DONE) {
+      return transfer.checksum ? "已完成 · 校验 " + transfer.checksum : "已完成";
+    }
+    if (transfer.status === TRANSFER_STATUS.CANCELED) {
+      return "已取消";
+    }
+    return transfer.error ? "失败 · " + transfer.error : "失败";
+  }
+
+  function createTransfer(direction, total, status) {
+    const transfer = {
+      id: transferID(),
+      direction,
+      status,
+      loaded: 0,
+      total: Number(total) || 0,
+      percent: 0,
+      label: "",
+      checksum: "",
+      error: "",
+      canCancel: status === TRANSFER_STATUS.QUEUED || status === TRANSFER_STATUS.SENDING || status === TRANSFER_STATUS.RECEIVING,
+      canRetry: false,
+    };
+    transfer.label = transferLabel(transfer);
+    return transfer;
+  }
+
+  function updateTransfer(message, patch) {
+    if (!message || !message.transfer) {
+      return;
+    }
+    Object.assign(message.transfer, patch || {});
+    const total = message.transfer.total || message.size || 0;
+    message.transfer.percent = total > 0 ? Math.floor((message.transfer.loaded || 0) * 100 / total) : 0;
+    message.transfer.canCancel = message.transfer.status === TRANSFER_STATUS.QUEUED ||
+      message.transfer.status === TRANSFER_STATUS.SENDING ||
+      message.transfer.status === TRANSFER_STATUS.RECEIVING;
+    message.transfer.canRetry = message.transfer.status === TRANSFER_STATUS.FAILED ||
+      (message.transfer.status === TRANSFER_STATUS.CANCELED && message.transfer.direction === "send");
+    message.transfer.label = transferLabel(message.transfer);
+    renderMessages();
+    renderConversations();
+  }
+
+  function createSendTransferMessage(peerId, file) {
+    const transfer = createTransfer("send", file.size, TRANSFER_STATUS.QUEUED);
+    const message = addChatMessage(peerId, {
+      id: 0, system: false, fromSelf: true, from: state.self ? state.self.id : "self",
+      author: selfName(), time: formatTime(new Date()),
+      kind: "file", mime: file.type || "application/octet-stream", name: file.name || "file",
+      size: file.size, url: "", p2p: true, file, transfer,
+    });
+    return message;
+  }
+
+  function findTransferMessage(messageId) {
+    for (const [convoKey, list] of Object.entries(state.threads)) {
+      const message = list.find((item) => item.id === messageId && item.transfer);
+      if (message) {
+        return { convoKey, message };
+      }
+    }
+    return null;
+  }
+
+  function findTransferByID(peerId, transferId) {
+    const list = state.threads[peerId] || [];
+    return list.find((message) => message.transfer && message.transfer.id === transferId) || null;
+  }
+
+  function cancelTransfer(messageId) {
+    const found = findTransferMessage(messageId);
+    if (!found) {
+      return;
+    }
+    const { message } = found;
+    const transfer = message.transfer;
+    if (transfer.status !== TRANSFER_STATUS.QUEUED && transfer.status !== TRANSFER_STATUS.SENDING && transfer.status !== TRANSFER_STATUS.RECEIVING) {
+      return;
+    }
+    updateTransfer(message, { status: TRANSFER_STATUS.CANCELED, error: "" });
+    rtc.queue = rtc.queue.filter((item) => item.message !== message);
+    if (rtc.sending && rtc.sending.message === message) {
+      rtc.sending.canceled = true;
+    }
+    if (rtc.recv && rtc.recv.message === message) {
+      rtc.recv = null;
+    }
+    if (rtc.channel && rtc.channel.readyState === "open") {
+      try { rtc.channel.send(JSON.stringify({ t: "cancel", id: transfer.id })); } catch { /* 忽略 */ }
+    }
+  }
+
+  function retryTransfer(messageId) {
+    const found = findTransferMessage(messageId);
+    if (!found) {
+      return;
+    }
+    const { message } = found;
+    const transfer = message.transfer;
+    if (transfer.direction === "send" && message.file) {
+      updateTransfer(message, { status: TRANSFER_STATUS.QUEUED, loaded: 0, error: "", checksum: "" });
+      void sendFileP2P(message.file, { message });
+      return;
+    }
+    if (transfer.direction === "recv" && rtc.channel && rtc.channel.readyState === "open") {
+      updateTransfer(message, { status: TRANSFER_STATUS.RECEIVING, loaded: 0, error: "", checksum: "" });
+      try { rtc.channel.send(JSON.stringify({ t: "retry", id: transfer.id })); } catch { /* 忽略 */ }
+    }
+  }
+
+  async function sendFileP2P(file, opts) {
+    opts = opts || {};
+    const peerId = state.active;
+    if (peerId === GROUP) {
+      showToast("P2P 仅用于私聊");
+      return;
+    }
+    if (!canSend()) {
+      return;
+    }
+    const message = opts.message || createSendTransferMessage(peerId, file);
+    if (!rtcConnected(peerId)) {
+      updateTransfer(message, { status: TRANSFER_STATUS.QUEUED, loaded: 0, error: "" });
+      rtc.queue.push({ file, message });
+      await requestP2P(peerId);
+      return;
+    }
+    await pushFile(file, message, opts.transferId || (message.transfer && message.transfer.id));
+  }
+
+  function flushQueue() {
+    const pending = rtc.queue.slice();
+    rtc.queue = [];
+    void (async () => {
+      for (const item of pending) {
+        await pushFile(item.file, item.message, item.message && item.message.transfer ? item.message.transfer.id : "");
+      }
+    })();
+  }
+
+  function waitDrain(channel) {
+    return new Promise((resolve) => {
+      channel.onbufferedamountlow = () => {
+        channel.onbufferedamountlow = null;
+        resolve();
+      };
+    });
+  }
+
+  async function pushFile(file, message, explicitTransferId) {
+    const channel = rtc.channel;
+    if (!channel || channel.readyState !== "open") {
+      return;
+    }
+    const peerId = rtc.peerId;
+    const mime = file.type || "application/octet-stream";
+    message = message || createSendTransferMessage(peerId, file);
+    if (!message.transfer) {
+      message.transfer = createTransfer("send", file.size, TRANSFER_STATUS.SENDING);
+    }
+    if (explicitTransferId) {
+      message.transfer.id = explicitTransferId;
+    }
+    const transferId = message.transfer.id;
+    rtc.sentFiles.set(transferId, file);
+    rtc.sending = { id: transferId, message, canceled: false };
+    updateTransfer(message, { status: TRANSFER_STATUS.SENDING, loaded: 0, total: file.size, error: "", checksum: "" });
+    channel.send(JSON.stringify({ t: "meta", id: transferId, name: file.name || "file", size: file.size, mime }));
+    try {
+      let offset = 0;
+      let checksum = checksumStart();
+      while (offset < file.size) {
+        if (rtc.sending && rtc.sending.id === transferId && rtc.sending.canceled) {
+          channel.send(JSON.stringify({ t: "cancel", id: transferId }));
+          updateTransfer(message, { status: TRANSFER_STATUS.CANCELED });
+          return;
+        }
+        if (channel.bufferedAmount > 8 * RTC_CHUNK) {
+          await waitDrain(channel);
+        }
+        if (channel.readyState !== "open") {
+          updateTransfer(message, { status: TRANSFER_STATUS.FAILED, error: "通道关闭" });
+          return;
+        }
+        const chunk = await file.slice(offset, offset + RTC_CHUNK).arrayBuffer();
+        checksum = checksumUpdate(checksum, new Uint8Array(chunk));
+        channel.send(chunk);
+        offset += chunk.byteLength;
+        updateTransfer(message, { status: TRANSFER_STATUS.SENDING, loaded: offset });
+      }
+      const finalChecksum = checksumHex(checksum);
+      channel.send(JSON.stringify({ t: "done", id: transferId, checksum: finalChecksum }));
+      message.url = URL.createObjectURL(file);
+      updateTransfer(message, { status: TRANSFER_STATUS.DONE, loaded: file.size, checksum: finalChecksum });
+    } catch (error) {
+      updateTransfer(message, { status: TRANSFER_STATUS.FAILED, error: safeError(error) });
+    } finally {
+      if (rtc.sending && rtc.sending.id === transferId) {
+        rtc.sending = null;
+      }
+    }
+  }
+
+  function handleChannelData(data) {
+    if (typeof data === "string") {
+      let msg;
+      try { msg = JSON.parse(data); } catch { return; }
+      if (msg.t === "meta") {
+        const transferId = msg.id || transferID();
+        let message = findTransferByID(rtc.peerId, transferId);
+        if (!message) {
+          message = addChatMessage(rtc.peerId, {
+            id: 0, system: false, fromSelf: false, from: rtc.peerId,
+            author: peerName(rtc.peerId), time: formatTime(new Date()),
+            kind: "file", mime: msg.mime || "application/octet-stream", name: msg.name || "file",
+            size: Number(msg.size) || 0, url: "", p2p: true,
+            transfer: createTransfer("recv", Number(msg.size) || 0, TRANSFER_STATUS.RECEIVING),
+          });
+          message.transfer.id = transferId;
+        } else {
+          updateTransfer(message, { status: TRANSFER_STATUS.RECEIVING, loaded: 0, total: Number(msg.size) || 0, error: "", checksum: "" });
+        }
+        rtc.recv = {
+          id: transferId,
+          name: msg.name,
+          size: Number(msg.size) || 0,
+          mime: msg.mime || "application/octet-stream",
+          chunks: [],
+          received: 0,
+          checksum: checksumStart(),
+          message,
+        };
+      } else if (msg.t === "done") {
+        finishRecv(msg.id || "", msg.checksum || "");
+      } else if (msg.t === "cancel") {
+        handleTransferCancel(msg.id || "");
+      } else if (msg.t === "retry") {
+        handleTransferRetry(msg.id || "");
+      } else if (msg.t === "msg" && typeof msg.e === "string") {
+        let envelope;
+        try { envelope = JSON.parse(msg.e); } catch { return; }
+        void routeEnvelope(envelope);
+      }
+      return;
+    }
+    if (rtc.recv && data instanceof ArrayBuffer) {
+      rtc.recv.chunks.push(data);
+      rtc.recv.received += data.byteLength;
+      rtc.recv.checksum = checksumUpdate(rtc.recv.checksum, new Uint8Array(data));
+      updateTransfer(rtc.recv.message, { status: TRANSFER_STATUS.RECEIVING, loaded: rtc.recv.received });
+    }
+  }
+
+  function handleTransferCancel(transferId) {
+    if (rtc.recv && (!transferId || rtc.recv.id === transferId)) {
+      updateTransfer(rtc.recv.message, { status: TRANSFER_STATUS.CANCELED });
+      rtc.recv = null;
+      return;
+    }
+    if (rtc.sending && (!transferId || rtc.sending.id === transferId)) {
+      rtc.sending.canceled = true;
+      updateTransfer(rtc.sending.message, { status: TRANSFER_STATUS.CANCELED });
+    }
+  }
+
+  function handleTransferRetry(transferId) {
+    const file = rtc.sentFiles.get(transferId);
+    if (!file || !rtcConnected(rtc.peerId)) {
+      return;
+    }
+    void pushFile(file, null, transferId);
+  }
+
+  function finishRecv(transferId, expectedChecksum) {
+    const received = rtc.recv;
+    rtc.recv = null;
+    if (!received) {
+      return;
+    }
+    if (transferId && received.id !== transferId) {
+      updateTransfer(received.message, { status: TRANSFER_STATUS.FAILED, error: "传输编号不匹配" });
+      return;
+    }
+    const actualChecksum = checksumHex(received.checksum);
+    if (received.received !== received.size) {
+      updateTransfer(received.message, { status: TRANSFER_STATUS.FAILED, error: "大小不匹配" });
+      return;
+    }
+    if (expectedChecksum && actualChecksum !== expectedChecksum) {
+      updateTransfer(received.message, { status: TRANSFER_STATUS.FAILED, error: "校验失败" });
+      return;
+    }
+    const blob = new Blob(received.chunks, { type: received.mime });
+    const url = URL.createObjectURL(blob);
+    const peerId = rtc.peerId;
+    received.message.url = url;
+    received.message.size = received.size || blob.size;
+    updateTransfer(received.message, { status: TRANSFER_STATUS.DONE, loaded: received.message.size, checksum: actualChecksum });
+    maybeBeep();
   }
 
   function applyBackground(dataURL, skipSave) {
+    state.backgroundImage = dataURL || "";
+    if (ui) {
+      ui.backgroundImage = state.backgroundImage;
+    }
     if (dataURL) {
-      document.body.style.backgroundImage = "url(" + dataURL + ")";
-      document.body.classList.add("has-bg");
       if (!skipSave) {
         saveSetting("bg", dataURL);
       }
     } else {
-      document.body.style.backgroundImage = "";
-      document.body.classList.remove("has-bg");
       try {
         localStorage.removeItem("pptter.bg");
       } catch {
@@ -876,206 +1829,54 @@
     if (state.muted) {
       return;
     }
+    playTone(state.tone);
+  }
+
+  // playTone 按预设依次合成几段振荡器音符，纯本地、无音频资源文件。
+  function playTone(name) {
     ensureAudio();
     if (!audioCtx) {
       return;
     }
+    const sequence = TONES[name] || TONES.soft;
+    const base = audioCtx.currentTime;
     try {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = "triangle";
-      osc.frequency.value = 660;
-      gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.12, audioCtx.currentTime + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.22);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.24);
+      for (const note of sequence) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = note.t;
+        osc.frequency.value = note.f;
+        const start = base + (note.at || 0);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(note.g, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + note.d);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(start);
+        osc.stop(start + note.d + 0.02);
+      }
     } catch {
       // 忽略音频错误。
     }
   }
 
-  function openLightbox(src) {
-    if (!dom.lightbox) {
-      return;
-    }
-    dom.lightboxImg.src = src;
-    dom.lightbox.classList.remove("hidden");
-  }
-
-  function closeLightbox() {
-    if (!dom.lightbox) {
-      return;
-    }
-    dom.lightbox.classList.add("hidden");
-    dom.lightboxImg.src = "";
-  }
-
   function renderSelfAvatar() {
-    if (!dom.selfAvatar || !state.self) {
+    if (!ui) {
       return;
     }
-    dom.selfAvatar.textContent = shortID(state.self.id).slice(0, 2);
-    const hue = colorHue(state.self.id);
-    dom.selfAvatar.style.background = "linear-gradient(135deg, hsl(" + hue + " 70% 38%), hsl(" + ((hue + 36) % 360) + " 78% 50%))";
-    applyAvatarSprite(dom.selfAvatar, state.self.id);
+    const id = state.self ? state.self.id : "";
+    const avatar = avatarModel(id, id ? shortID(id).slice(0, 2) : "我");
+    ui.selfAvatarText = avatar.text || (id ? "" : "我");
+    ui.selfAvatarClass = avatar.avatarClass;
   }
 
-  // ---- 加密原语 ----
-
-  async function deriveSharedKey(privateKey, peerPublicKey, saltBytes) {
-    const sharedBits = await crypto.subtle.deriveBits({ name: "X25519", public: peerPublicKey }, privateKey, 256);
-    const sharedBytes = new Uint8Array(sharedBits);
-    try {
-      const hkdfKey = await crypto.subtle.importKey("raw", sharedBytes, "HKDF", false, ["deriveKey"]);
-      return await crypto.subtle.deriveKey(
-        { name: "HKDF", hash: "SHA-256", salt: saltBytes, info: textEncoder.encode(HKDF_INFO) },
-        hkdfKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
-    } finally {
-      wipeBytes(sharedBytes);
-    }
-  }
-
-  function signedView(envelope, dest) {
-    const canonical = [
-      "v" + PROTOCOL_VERSION, envelope.scope, dest,
-      String(envelope.ctr), String(envelope.ts), envelope.salt, envelope.iv, envelope.ct,
-    ].join("|");
-    return textEncoder.encode(canonical);
-  }
-
-  function padPlaintext(plaintextBytes) {
-    const total = 4 + plaintextBytes.length;
-    const padded = new Uint8Array(Math.ceil(total / PAD_BUCKET) * PAD_BUCKET);
-    padded[0] = (plaintextBytes.length >>> 24) & 0xff;
-    padded[1] = (plaintextBytes.length >>> 16) & 0xff;
-    padded[2] = (plaintextBytes.length >>> 8) & 0xff;
-    padded[3] = plaintextBytes.length & 0xff;
-    padded.set(plaintextBytes, 4);
-    return padded;
-  }
-
-  function unpadPlaintext(paddedBytes) {
-    if (paddedBytes.length < 4) {
-      throw new Error("padding 长度不足");
-    }
-    const length = (paddedBytes[0] * 0x1000000) + (paddedBytes[1] << 16) + (paddedBytes[2] << 8) + paddedBytes[3];
-    if (length < 0 || length > paddedBytes.length - 4) {
-      throw new Error("padding 长度非法");
-    }
-    return textDecoder.decode(paddedBytes.subarray(4, 4 + length));
-  }
-
-  function initialRoom() {
-    const fromHash = normalizeRoom(decodeURIComponent((location.hash || "").replace(/^#/, "")));
-    return fromHash || DEFAULT_ROOM;
-  }
-
-  function normalizeRoom(value) {
-    return String(value || "").trim().replace(roomPattern, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
-  }
-
-  function websocketURL(room) {
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    return protocol + "//" + location.host + "/ws/" + encodeURIComponent(room);
-  }
-
-  function bytesToBase64(bytes) {
-    let binary = "";
-    const chunkSize = 0x8000;
-    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-      binary += String.fromCharCode.apply(null, bytes.subarray(offset, offset + chunkSize));
-    }
-    return btoa(binary);
-  }
-
-  function base64ToBytes(base64) {
-    const binary = atob(String(base64 || ""));
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes;
-  }
-
-  function wipeBytes(bytes) {
-    if (bytes && typeof bytes.fill === "function") {
-      bytes.fill(0);
-    }
-  }
-
-  function shortID(id) {
-    if (!id) {
-      return "未知";
-    }
-    return id.length <= 12 ? id : id.slice(0, 6) + "…" + id.slice(-4);
-  }
-
-  function colorHue(id) {
-    let hash = 0;
-    for (let i = 0; i < id.length; i += 1) {
-      hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
-    }
-    return hash % 360;
-  }
-
-  // 头像精灵图：10×10 网格、100 个原创二次元头像。优先 AVIF，浏览器不支持时回退 PNG。
-  // 用 1px AVIF 探测解码能力，成功后切到 .avif 并重渲染已有头像。
-  const AVIF_PROBE = "data:image/avif;base64,AAAAIGZ0eXBhdmlmAAAAAGF2aWZtaWYxbWlhZk1BMUIAAADybWV0YQAAAAAAAAAoaGRscgAAAAAAAAAAcGljdAAAAAAAAAAAAAAAAGxpYmF2aWYAAAAADnBpdG0AAAAAAAEAAAAeaWxvYwAAAABEAAABAAEAAAABAAABGgAAAB0AAAAoaWluZgAAAAAAAQAAABppbmZlAgAAAAABAABhdjAxQ29sb3IAAAAAamlwcnAAAABLaXBjbwAAABRpc3BlAAAAAAAAAAEAAAABAAAAEHBpeGkAAAAAAwgICAAAAAxhdjFDgQ0MAAAAABNjb2xybmNseAACAAIABoAAAAAXaXBtYQAAAAAAAAABAAEEAQKDBAAAACVtZGF0EgAKCBgABogQEDQgMgkQAAAAB8dSLfI=";
-
-  function detectAvatarSprite() {
-    const probe = new Image();
-    probe.onload = () => {
-      avatarSpriteURL = probe.width > 0 ? "/static/img/avatar.avif" : "/static/img/avatar.png";
-      reapplyAvatarSprites();
-    };
-    probe.onerror = () => {
-      avatarSpriteURL = "/static/img/avatar.png";
-      reapplyAvatarSprites();
-    };
-    probe.src = AVIF_PROBE;
-  }
-
-  function reapplyAvatarSprites() {
-    renderConversations();
-    renderSelfAvatar();
-  }
-
-  function avatarIndex(id) {
-    let hash = 0;
-    for (let i = 0; i < id.length; i += 1) {
-      hash = (hash * 131 + id.charCodeAt(i)) >>> 0;
-    }
-    return hash % 100;
-  }
-
-  function applyAvatarSprite(el, id) {
-    if (!avatarSpriteURL || !el) {
-      return;
-    }
-    const idx = avatarIndex(id);
-    const col = idx % 10;
-    const row = Math.floor(idx / 10);
-    el.textContent = "";
-    el.style.backgroundImage = "url(" + avatarSpriteURL + ")";
-    el.style.backgroundSize = "1000% 1000%";
-    el.style.backgroundRepeat = "no-repeat";
-    el.style.backgroundPosition = (col / 9 * 100) + "% " + (row / 9 * 100) + "%";
-  }
-
-  function formatTime(date) {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  }
-
-  function safeError(error) {
-    return error && error.message ? String(error.message).slice(0, 120) : "未知错误";
+  function fallbackBoot() {
+    setTimeout(boot, 0);
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start);
+    document.addEventListener("DOMContentLoaded", fallbackBoot);
   } else {
-    start();
+    fallbackBoot();
   }
 })();
