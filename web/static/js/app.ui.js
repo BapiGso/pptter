@@ -26,6 +26,9 @@
         callTitle: "发起语音通话",
         micTitle: "静音",
         sendDisabled: true,
+        noteHidden: false,
+        composerMenuOpen: false,
+        themeOptions: [],
         inputPlaceholder: "群聊消息，本地加密后发送",
         draft: "",
         settingsOpen: false,
@@ -57,6 +60,15 @@
           actions.sync();
         },
         sendText: actions.sendText,
+        sendNote: actions.sendNote,
+        pickFromMenu() {
+          this.composerMenuOpen = false;
+          actions.pickFile();
+        },
+        noteFromMenu() {
+          this.composerMenuOpen = false;
+          actions.sendNote();
+        },
         select(key) {
           this.menuOpen = false;
           actions.select(key);
@@ -65,6 +77,11 @@
           this.menuOpen = false;
           actions.reconnect();
         },
+        createRoom() {
+          this.menuOpen = false;
+          actions.createRoom();
+        },
+        shareRoom: actions.shareRoom,
         pickFile: actions.pickFile,
         p2pClick: actions.p2pClick,
         toggleScreenShare: actions.toggleScreenShare,

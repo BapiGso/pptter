@@ -6,7 +6,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +28,22 @@ const (
 	defaultWriteTimeout         = 5 * time.Second
 	defaultRateLimitPerSecond   = 10
 	defaultRateLimitBurst       = 20
+	defaultMaxRooms             = 128
+	defaultMaxClients           = defaultMaxRoomMembers * defaultMaxRooms
+	defaultGlobalJoinRate       = 20
+	defaultGlobalJoinBurst      = 40
+	defaultGlobalMessageRate    = 200
+	defaultGlobalMessageBurst   = 400
+	defaultRoomJoinRate         = 3
+	defaultRoomJoinBurst        = 8
+	defaultRoomMessageRate      = 40
+	defaultRoomMessageBurst     = 80
+	defaultClientJoinRate       = 2
+	defaultClientJoinBurst      = 6
+	defaultClientBlacklistTTL   = 5 * time.Minute
+	defaultNoteTTL              = 30 * time.Minute
+	defaultMaxNotesPerRoom      = 50
+	defaultMaxRoomNoteBytes     = 8 * 1024 * 1024
 )
 
 // Config 只描述内存中 WebSocket 转发层的安全边界。
@@ -34,24 +52,59 @@ const (
 // 过大的 JSON 包导致服务端内存被滥用。服务端始终只把 payload 当作不透明密文。
 type Config struct {
 	MaxRoomMembers       int
+	MaxRooms             int
+	MaxClients           int
 	MaxPublicKeyBytes    int
 	MaxInboundBytes      int64
 	MaxCiphertextBytes   int
 	MaxFanoutPerEnvelope int
 	HandshakeTimeout     time.Duration
 	WriteTimeout         time.Duration
+	GlobalJoinRate       int
+	GlobalJoinBurst      int
+	GlobalMessageRate    int
+	GlobalMessageBurst   int
+	RoomJoinRate         int
+	RoomJoinBurst        int
+	RoomMessageRate      int
+	RoomMessageBurst     int
+	ClientJoinRate       int
+	ClientJoinBurst      int
+	ClientBlacklistTTL   time.Duration
+	// 留言（离线消息）信箱：服务端只暂存不可解密的密文字符串，带 TTL 与容量上限，进程退出即清空。
+	NoteTTL          time.Duration
+	MaxNotesPerRoom  int
+	MaxNoteBytes     int
+	MaxRoomNoteBytes int
 }
 
 // NewConfig 返回适合 3-5 人匿名房间的保守默认值。
 func NewConfig() Config {
 	return Config{
 		MaxRoomMembers:       defaultMaxRoomMembers,
+		MaxRooms:             defaultMaxRooms,
+		MaxClients:           defaultMaxClients,
 		MaxPublicKeyBytes:    defaultMaxPublicKeyBytes,
 		MaxInboundBytes:      defaultMaxInboundBytes,
 		MaxCiphertextBytes:   defaultMaxCiphertextBytes,
 		MaxFanoutPerEnvelope: defaultMaxFanoutPerEnvelope,
 		HandshakeTimeout:     defaultHandshakeTimeout,
 		WriteTimeout:         defaultWriteTimeout,
+		GlobalJoinRate:       defaultGlobalJoinRate,
+		GlobalJoinBurst:      defaultGlobalJoinBurst,
+		GlobalMessageRate:    defaultGlobalMessageRate,
+		GlobalMessageBurst:   defaultGlobalMessageBurst,
+		RoomJoinRate:         defaultRoomJoinRate,
+		RoomJoinBurst:        defaultRoomJoinBurst,
+		RoomMessageRate:      defaultRoomMessageRate,
+		RoomMessageBurst:     defaultRoomMessageBurst,
+		ClientJoinRate:       defaultClientJoinRate,
+		ClientJoinBurst:      defaultClientJoinBurst,
+		ClientBlacklistTTL:   defaultClientBlacklistTTL,
+		NoteTTL:              defaultNoteTTL,
+		MaxNotesPerRoom:      defaultMaxNotesPerRoom,
+		MaxNoteBytes:         defaultMaxCiphertextBytes,
+		MaxRoomNoteBytes:     defaultMaxRoomNoteBytes,
 	}
 }
 
@@ -67,8 +120,13 @@ func NewConfig() Config {
 type Hub struct {
 	cfg Config
 
-	mu    sync.Mutex
-	rooms map[string]*room
+	mu                   sync.Mutex
+	rooms                map[string]*room
+	clients              int
+	globalJoinLimiter    *tokenBucket
+	globalMessageLimiter *tokenBucket
+	clientJoinLimiters   map[string]*clientLimiter
+	clientBlacklist      map[string]time.Time
 }
 
 // NewHub 创建一个新的纯内存转发中心。
@@ -76,9 +134,60 @@ func NewHub(cfg Config) *Hub {
 	cfg = normalizeConfig(cfg)
 
 	return &Hub{
-		cfg:   cfg,
-		rooms: make(map[string]*room),
+		cfg:                  cfg,
+		rooms:                make(map[string]*room),
+		globalJoinLimiter:    newTokenBucket(cfg.GlobalJoinRate, cfg.GlobalJoinBurst, time.Now()),
+		globalMessageLimiter: newTokenBucket(cfg.GlobalMessageRate, cfg.GlobalMessageBurst, time.Now()),
+		clientJoinLimiters:   make(map[string]*clientLimiter),
+		clientBlacklist:      make(map[string]time.Time),
 	}
+}
+
+type clientKeyContextKey struct{}
+
+// WithClientKey stores a short-lived, in-memory client limiter key on the request context.
+func WithClientKey(ctx context.Context, key string) context.Context {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, clientKeyContextKey{}, key)
+}
+
+// ClientKeyFromRequest returns the limiter key captured by the HTTP layer, falling back
+// to the TCP peer address. The value is only used in memory for TTL rate limiting.
+func ClientKeyFromRequest(request *http.Request) string {
+	if request == nil {
+		return ""
+	}
+	if value, ok := request.Context().Value(clientKeyContextKey{}).(string); ok && value != "" {
+		return value
+	}
+	return NormalizeClientKey(request.RemoteAddr)
+}
+
+// NormalizeClientKey canonicalizes an IP-ish value for in-memory rate limiting.
+// IPv6 addresses are aggregated to /64 to avoid trivial per-address rotation.
+func NormalizeClientKey(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	if idx := strings.IndexByte(value, ','); idx >= 0 {
+		value = strings.TrimSpace(value[:idx])
+	}
+	value = strings.Trim(value, "[]\"'")
+	if host, _, err := net.SplitHostPort(value); err == nil {
+		value = strings.Trim(host, "[]")
+	}
+	addr, err := netip.ParseAddr(value)
+	if err != nil {
+		return ""
+	}
+	if addr.Is4() || addr.Is4In6() {
+		return addr.Unmap().String()
+	}
+	return netip.PrefixFrom(addr, 64).Masked().String()
 }
 
 // HandleWebSocket 是 Echo 路由处理函数。
@@ -96,6 +205,10 @@ func (h *Hub) HandleWebSocket(c *echo.Context) error {
 	roomName := c.Param("room")
 	if !validRoomName(roomName) {
 		return c.NoContent(http.StatusNotFound)
+	}
+	clientKey := ClientKeyFromRequest(c.Request())
+	if !h.allowJoinRequest(roomName, clientKey, time.Now()) {
+		return c.NoContent(http.StatusTooManyRequests)
 	}
 
 	conn, err := websocket.Accept(c.Response(), c.Request(), &websocket.AcceptOptions{
@@ -117,6 +230,7 @@ func (h *Hub) HandleWebSocket(c *echo.Context) error {
 		return nil
 	}
 	client.hub = h
+	client.clientKey = clientKey
 
 	peers, err := h.join(roomName, client)
 	if err != nil {
@@ -140,6 +254,7 @@ func (h *Hub) HandleWebSocket(c *echo.Context) error {
 			DHSig: client.dhSig,
 		},
 		Peers: peers,
+		Notes: client.room.snapshotNotes(time.Now()),
 	}, true); err != nil {
 		return nil
 	}
@@ -155,6 +270,14 @@ func (h *Hub) HandleWebSocket(c *echo.Context) error {
 
 		if !rateLimiter.allow(time.Now()) {
 			zeroBytes(data)
+			h.blacklistClient(client.clientKey, time.Now())
+			_ = conn.Close(websocket.StatusPolicyViolation, "rate")
+			return nil
+		}
+
+		if !h.allowMessage(client, time.Now()) {
+			zeroBytes(data)
+			h.blacklistClient(client.clientKey, time.Now())
 			_ = conn.Close(websocket.StatusPolicyViolation, "rate")
 			return nil
 		}
@@ -217,7 +340,25 @@ func (h *Hub) acceptHello(parent context.Context, conn *websocket.Conn) (*client
 	}, nil
 }
 
-// handleClientEnvelope 处理客户端扇出包。
+// handleClientEnvelope 先窥视 type，再分派：send（密文扇出）或 note_put（留言入信箱）。
+func (h *Hub) handleClientEnvelope(ctx context.Context, sender *client, data []byte) error {
+	var peek struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(data, &peek); err != nil {
+		return err
+	}
+	switch peek.Type {
+	case "send":
+		return h.handleSend(ctx, sender, data)
+	case "note_put":
+		return h.handleNotePut(sender, data)
+	default:
+		return errors.New("unsupported envelope type")
+	}
+}
+
+// handleSend 处理客户端扇出包。
 //
 // 客户端示例：
 //
@@ -232,7 +373,7 @@ func (h *Hub) acceptHello(parent context.Context, conn *websocket.Conn) (*client
 //   - 根据 dest 定位内存中的 WebSocket 连接；
 //   - 原样转发 payload 这个 JSON 字符串值；
 //   - 写入完成后立刻清零本层持有的 []byte。
-func (h *Hub) handleClientEnvelope(ctx context.Context, sender *client, data []byte) error {
+func (h *Hub) handleSend(ctx context.Context, sender *client, data []byte) error {
 	var envelope sendEnvelope
 	if err := json.Unmarshal(data, &envelope); err != nil {
 		return err
@@ -278,9 +419,48 @@ func (h *Hub) handleClientEnvelope(ctx context.Context, sender *client, data []b
 	return nil
 }
 
+// handleNotePut 把一条留言（不可解密的密文字符串）存入当前房间信箱，并实时广播给其他在线成员。
+//
+// 客户端示例：{"type":"note_put","note":"<不透明密文字符串>"}
+//
+// 留言安全性弱于实时端到端消息：服务端持有密文、无前向保密、同房间任何人都能解（用房间预共享密钥），
+// 因此前端会以醒目样式区分。服务端依旧零知识：只校验长度与「是 JSON 字符串值」，绝不解码内容。
+func (h *Hub) handleNotePut(sender *client, data []byte) error {
+	var envelope notePutEnvelope
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return err
+	}
+	if envelope.Type != "note_put" {
+		zeroBytes(envelope.Note)
+		return errors.New("unsupported envelope type")
+	}
+	if !validCiphertextPayload(envelope.Note, h.cfg.MaxNoteBytes) {
+		zeroBytes(envelope.Note)
+		return errors.New("invalid note")
+	}
+
+	// note 别名指向即将被调用方清零的 data，必须先拷贝出独立副本再入信箱。
+	noteCopy := append(json.RawMessage(nil), envelope.Note...)
+	zeroBytes(envelope.Note)
+
+	r := sender.room
+	if r == nil {
+		return errors.New("note without room")
+	}
+	r.addNote(noteCopy, time.Now())
+	r.broadcastExcept(sender.id, noteFrame{Type: "note", Note: noteCopy})
+	return nil
+}
+
 func normalizeConfig(cfg Config) Config {
 	if cfg.MaxRoomMembers <= 0 {
 		cfg.MaxRoomMembers = defaultMaxRoomMembers
+	}
+	if cfg.MaxRooms <= 0 {
+		cfg.MaxRooms = defaultMaxRooms
+	}
+	if cfg.MaxClients <= 0 {
+		cfg.MaxClients = cfg.MaxRoomMembers * cfg.MaxRooms
 	}
 	if cfg.MaxPublicKeyBytes <= 0 {
 		cfg.MaxPublicKeyBytes = defaultMaxPublicKeyBytes
@@ -300,26 +480,98 @@ func normalizeConfig(cfg Config) Config {
 	if cfg.WriteTimeout <= 0 {
 		cfg.WriteTimeout = defaultWriteTimeout
 	}
+	if cfg.GlobalJoinRate <= 0 {
+		cfg.GlobalJoinRate = defaultGlobalJoinRate
+	}
+	if cfg.GlobalJoinBurst <= 0 {
+		cfg.GlobalJoinBurst = defaultGlobalJoinBurst
+	}
+	if cfg.GlobalMessageRate <= 0 {
+		cfg.GlobalMessageRate = defaultGlobalMessageRate
+	}
+	if cfg.GlobalMessageBurst <= 0 {
+		cfg.GlobalMessageBurst = defaultGlobalMessageBurst
+	}
+	if cfg.RoomJoinRate <= 0 {
+		cfg.RoomJoinRate = defaultRoomJoinRate
+	}
+	if cfg.RoomJoinBurst <= 0 {
+		cfg.RoomJoinBurst = defaultRoomJoinBurst
+	}
+	if cfg.RoomMessageRate <= 0 {
+		cfg.RoomMessageRate = defaultRoomMessageRate
+	}
+	if cfg.RoomMessageBurst <= 0 {
+		cfg.RoomMessageBurst = defaultRoomMessageBurst
+	}
+	if cfg.ClientJoinRate <= 0 {
+		cfg.ClientJoinRate = defaultClientJoinRate
+	}
+	if cfg.ClientJoinBurst <= 0 {
+		cfg.ClientJoinBurst = defaultClientJoinBurst
+	}
+	if cfg.ClientBlacklistTTL <= 0 {
+		cfg.ClientBlacklistTTL = defaultClientBlacklistTTL
+	}
+	if cfg.NoteTTL <= 0 {
+		cfg.NoteTTL = defaultNoteTTL
+	}
+	if cfg.MaxNotesPerRoom <= 0 {
+		cfg.MaxNotesPerRoom = defaultMaxNotesPerRoom
+	}
+	if cfg.MaxNoteBytes <= 0 {
+		cfg.MaxNoteBytes = defaultMaxCiphertextBytes
+	}
+	if cfg.MaxRoomNoteBytes <= 0 {
+		cfg.MaxRoomNoteBytes = defaultMaxRoomNoteBytes
+	}
 
 	return cfg
 }
 
 func (h *Hub) join(roomName string, c *client) ([]publicPeer, error) {
+	now := time.Now()
+	reserved := false
+
 	h.mu.Lock()
 	r := h.rooms[roomName]
 	if r == nil {
+		if len(h.rooms) >= h.cfg.MaxRooms {
+			// 容量吃紧时，先回收「已无人且无未过期留言」的空房间（留言信箱可能让空房间续命到 TTL）。
+			h.sweepEmptyRoomsLocked(now)
+		}
+		if len(h.rooms) >= h.cfg.MaxRooms {
+			h.mu.Unlock()
+			return nil, errors.New("too many rooms")
+		}
 		r = &room{
-			name:    roomName,
-			hub:     h,
-			clients: make(map[string]*client),
+			name:           roomName,
+			hub:            h,
+			clients:        make(map[string]*client),
+			joinLimiter:    newTokenBucket(h.cfg.RoomJoinRate, h.cfg.RoomJoinBurst, now),
+			messageLimiter: newTokenBucket(h.cfg.RoomMessageRate, h.cfg.RoomMessageBurst, now),
 		}
 		h.rooms[roomName] = r
 	}
+	if h.clients >= h.cfg.MaxClients {
+		h.mu.Unlock()
+		return nil, errors.New("too many clients")
+	}
+	h.clients++
+	reserved = true
 	h.mu.Unlock()
+	defer func() {
+		if reserved {
+			h.releaseClientReservation(r)
+		}
+	}()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if !r.joinLimiter.allow(now) {
+		return nil, errors.New("room join rate exceeded")
+	}
 	if len(r.clients) >= h.cfg.MaxRoomMembers {
 		return nil, errors.New("room full")
 	}
@@ -339,6 +591,7 @@ func (h *Hub) join(roomName string, c *client) ([]publicPeer, error) {
 
 	c.room = r
 	r.clients[c.id] = c
+	reserved = false
 
 	return peers, nil
 }
@@ -365,8 +618,18 @@ func (h *Hub) leave(c *client, notify bool) {
 
 	if empty {
 		h.mu.Lock()
-		if h.rooms[r.name] == r {
+		if h.clients > 0 {
+			h.clients--
+		}
+		// 房间空了，但若信箱里还有未过期留言，则保留房间，让离线成员之后仍能取到留言。
+		if h.rooms[r.name] == r && !r.hasLiveNotes(time.Now()) {
 			delete(h.rooms, r.name)
+		}
+		h.mu.Unlock()
+	} else {
+		h.mu.Lock()
+		if h.clients > 0 {
+			h.clients--
 		}
 		h.mu.Unlock()
 	}
@@ -375,6 +638,38 @@ func (h *Hub) leave(c *client, notify bool) {
 
 	if notify {
 		h.broadcastPeerLeft(r, c.id)
+	}
+}
+
+func (h *Hub) releaseClientReservation(r *room) {
+	empty := false
+	if r != nil {
+		r.mu.RLock()
+		empty = len(r.clients) == 0
+		r.mu.RUnlock()
+	}
+
+	h.mu.Lock()
+	if h.clients > 0 {
+		h.clients--
+	}
+	if empty && r != nil && h.rooms[r.name] == r && !r.hasLiveNotes(time.Now()) {
+		delete(h.rooms, r.name)
+	}
+	h.mu.Unlock()
+}
+
+// sweepEmptyRoomsLocked 在持有 h.mu 时回收「无人在线且无未过期留言」的房间。
+// MaxRooms 有上限（默认 128），遍历开销很小；这是无后台协程的惰性清理。
+func (h *Hub) sweepEmptyRoomsLocked(now time.Time) {
+	for name, r := range h.rooms {
+		r.mu.RLock()
+		empty := len(r.clients) == 0
+		live := r.hasLiveNotesLocked(now)
+		r.mu.RUnlock()
+		if empty && !live {
+			delete(h.rooms, name)
+		}
 	}
 }
 
@@ -401,8 +696,89 @@ type room struct {
 	name string
 	hub  *Hub
 
-	mu      sync.RWMutex
-	clients map[string]*client
+	mu             sync.RWMutex
+	clients        map[string]*client
+	joinLimiter    *tokenBucket
+	messageLimiter *tokenBucket
+	notes          []storedNote
+}
+
+// storedNote 是房间信箱里一条留言：服务端只持有不透明密文字符串、留存时间与字节数，永不解密。
+type storedNote struct {
+	payload  json.RawMessage
+	storedAt time.Time
+	size     int
+}
+
+// addNote 把一条留言写入房间信箱：先清掉过期项，再按条数/总字节上限淘汰最旧的留言。
+func (r *room) addNote(payload json.RawMessage, now time.Time) {
+	cfg := r.hub.cfg
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.purgeExpiredLocked(now)
+	r.notes = append(r.notes, storedNote{payload: payload, storedAt: now, size: len(payload)})
+
+	if cfg.MaxNotesPerRoom > 0 && len(r.notes) > cfg.MaxNotesPerRoom {
+		r.notes = append(r.notes[:0], r.notes[len(r.notes)-cfg.MaxNotesPerRoom:]...)
+	}
+	if cfg.MaxRoomNoteBytes > 0 {
+		total := 0
+		for _, note := range r.notes {
+			total += note.size
+		}
+		for total > cfg.MaxRoomNoteBytes && len(r.notes) > 1 {
+			total -= r.notes[0].size
+			r.notes = r.notes[1:]
+		}
+	}
+}
+
+// snapshotNotes 清掉过期留言后，返回剩余留言密文的拷贝，用于随 welcome 投递给新加入者。
+func (r *room) snapshotNotes(now time.Time) []json.RawMessage {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.purgeExpiredLocked(now)
+	if len(r.notes) == 0 {
+		return nil
+	}
+	out := make([]json.RawMessage, 0, len(r.notes))
+	for _, note := range r.notes {
+		out = append(out, append(json.RawMessage(nil), note.payload...))
+	}
+	return out
+}
+
+// hasLiveNotes 报告房间是否仍有未过期留言；房间空了但还有留言时不能被回收。
+func (r *room) hasLiveNotes(now time.Time) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.hasLiveNotesLocked(now)
+}
+
+func (r *room) hasLiveNotesLocked(now time.Time) bool {
+	ttl := r.hub.cfg.NoteTTL
+	for _, note := range r.notes {
+		if now.Sub(note.storedAt) < ttl {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *room) purgeExpiredLocked(now time.Time) {
+	ttl := r.hub.cfg.NoteTTL
+	kept := r.notes[:0]
+	for _, note := range r.notes {
+		if now.Sub(note.storedAt) < ttl {
+			kept = append(kept, note)
+		}
+	}
+	for i := len(kept); i < len(r.notes); i++ {
+		r.notes[i] = storedNote{}
+	}
+	r.notes = kept
 }
 
 func (r *room) resolveRecipient(dest string) *client {
@@ -442,12 +818,13 @@ func (r *room) snapshotExcept(excludedID string) []*client {
 type client struct {
 	hub *Hub
 
-	id    string
-	idKey string
-	dhKey string
-	dhSig string
-	conn  *websocket.Conn
-	room  *room
+	id        string
+	idKey     string
+	dhKey     string
+	dhSig     string
+	conn      *websocket.Conn
+	room      *room
+	clientKey string
 
 	writeMu sync.Mutex
 }
@@ -491,15 +868,26 @@ type sendEnvelope struct {
 	Messages []fanoutItem `json:"messages"`
 }
 
+type notePutEnvelope struct {
+	Type string          `json:"type"`
+	Note json.RawMessage `json:"note"`
+}
+
+type noteFrame struct {
+	Type string          `json:"type"`
+	Note json.RawMessage `json:"note"`
+}
+
 type fanoutItem struct {
 	Dest    string          `json:"dest"`
 	Payload json.RawMessage `json:"payload"`
 }
 
 type welcomeFrame struct {
-	Type  string       `json:"type"`
-	Self  publicPeer   `json:"self"`
-	Peers []publicPeer `json:"peers"`
+	Type  string            `json:"type"`
+	Self  publicPeer        `json:"self"`
+	Peers []publicPeer      `json:"peers"`
+	Notes []json.RawMessage `json:"notes,omitempty"`
 }
 
 type peerJoinedFrame struct {
@@ -534,9 +922,127 @@ func buildCiphertextFrame(from string, payload json.RawMessage) []byte {
 	return frame
 }
 
+func (h *Hub) allowJoinRequest(roomName string, clientKey string, now time.Time) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.cleanupClientLimiters(now)
+
+	if blockedUntil, ok := h.clientBlacklist[clientKey]; ok {
+		if now.Before(blockedUntil) {
+			return false
+		}
+		delete(h.clientBlacklist, clientKey)
+	}
+	if !h.globalJoinLimiter.allow(now) {
+		return false
+	}
+	if h.clients >= h.cfg.MaxClients {
+		return false
+	}
+	if h.rooms[roomName] == nil && len(h.rooms) >= h.cfg.MaxRooms {
+		return false
+	}
+	if clientKey == "" {
+		return true
+	}
+
+	limiter := h.clientJoinLimiters[clientKey]
+	if limiter == nil {
+		limiter = &clientLimiter{
+			joins: newTokenBucket(h.cfg.ClientJoinRate, h.cfg.ClientJoinBurst, now),
+		}
+		h.clientJoinLimiters[clientKey] = limiter
+	}
+	limiter.lastSeen = now
+	if limiter.joins.allow(now) {
+		return true
+	}
+	h.clientBlacklist[clientKey] = now.Add(h.cfg.ClientBlacklistTTL)
+	return false
+}
+
+func (h *Hub) allowMessage(c *client, now time.Time) bool {
+	h.mu.Lock()
+	globalOK := h.globalMessageLimiter.allow(now)
+	h.mu.Unlock()
+	if !globalOK {
+		return false
+	}
+	if c == nil || c.room == nil {
+		return false
+	}
+
+	c.room.mu.Lock()
+	defer c.room.mu.Unlock()
+	return c.room.messageLimiter.allow(now)
+}
+
+func (h *Hub) blacklistClient(clientKey string, now time.Time) {
+	if clientKey == "" {
+		return
+	}
+	h.mu.Lock()
+	h.clientBlacklist[clientKey] = now.Add(h.cfg.ClientBlacklistTTL)
+	h.mu.Unlock()
+}
+
+func (h *Hub) cleanupClientLimiters(now time.Time) {
+	expiresBefore := now.Add(-h.cfg.ClientBlacklistTTL)
+	for key, limiter := range h.clientJoinLimiters {
+		if limiter.lastSeen.Before(expiresBefore) {
+			delete(h.clientJoinLimiters, key)
+		}
+	}
+	for key, blockedUntil := range h.clientBlacklist {
+		if !now.Before(blockedUntil) {
+			delete(h.clientBlacklist, key)
+		}
+	}
+}
+
 func publicKeyID(idKey string) string {
 	sum := sha256.Sum256([]byte(idKey))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+type clientLimiter struct {
+	joins    *tokenBucket
+	lastSeen time.Time
+}
+
+type tokenBucket struct {
+	tokens          float64
+	capacity        float64
+	refillPerSecond float64
+	last            time.Time
+}
+
+func newTokenBucket(ratePerSecond int, burst int, now time.Time) *tokenBucket {
+	return &tokenBucket{
+		tokens:          float64(burst),
+		capacity:        float64(burst),
+		refillPerSecond: float64(ratePerSecond),
+		last:            now,
+	}
+}
+
+func (bucket *tokenBucket) allow(now time.Time) bool {
+	if bucket == nil {
+		return true
+	}
+	if now.After(bucket.last) {
+		bucket.tokens += now.Sub(bucket.last).Seconds() * bucket.refillPerSecond
+		if bucket.tokens > bucket.capacity {
+			bucket.tokens = bucket.capacity
+		}
+		bucket.last = now
+	}
+	if bucket.tokens < 1 {
+		return false
+	}
+	bucket.tokens--
+	return true
 }
 
 type messageRateLimiter struct {

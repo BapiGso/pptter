@@ -10,7 +10,9 @@ import (
 	"io/fs"
 	"log"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"strconv"
@@ -62,6 +64,7 @@ func main() {
 		_ = c.NoContent(status)
 	}
 
+	e.Pre(captureClientKey)
 	e.Pre(stripIdentifyingHeaders)
 
 	hub := relay.NewHub(relay.NewConfig())
@@ -103,10 +106,11 @@ func main() {
 
 	// 前端只从本机静态目录加载资源，不引用任何第三方 CDN。
 	e.StaticFS("/static", echo.MustSubFS(webfs.FS(), "static"))
-	// 单页应用：房间号放在前端 URL hash（#room）里，纯客户端处理，
-	// 服务端无需任何 /r/:room 路由重写。
+	// 单页应用：支持 /r/:room 作为可分享入口；房间名仅用于返回同一个 SPA，
+	// 真实房间解析仍在前端完成。
 	e.GET("/", serveIndex)
 	e.GET("/index.html", serveIndex)
+	e.GET("/r/:room", serveIndex)
 
 	// 匿名房间入口：房间名只作为内存 map 的 key，不落盘。
 	e.GET("/ws/:room", hub.HandleWebSocket)
@@ -275,6 +279,44 @@ func webRTCConfigHandler(stunServer *stunserver.Server, stunHost string) echo.Ha
 			STUNHost: stunHost,
 		})
 	}
+}
+
+// captureClientKey 在剥离代理头之前，为内存限流捕获一个短期 client key。
+// key 不写日志、不落盘；若请求来自本机/内网可信反代，则优先使用代理传来的真实 IP。
+func captureClientKey(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		request := c.Request()
+		key := relay.NormalizeClientKey(request.RemoteAddr)
+		if trustedProxyRemote(request.RemoteAddr) {
+			for _, headerName := range []string{
+				"CF-Connecting-IP",
+				"True-Client-IP",
+				"X-Real-IP",
+				"X-Forwarded-For",
+			} {
+				if candidate := relay.NormalizeClientKey(request.Header.Get(headerName)); candidate != "" {
+					key = candidate
+					break
+				}
+			}
+		}
+		if key != "" {
+			c.SetRequest(request.WithContext(relay.WithClientKey(request.Context(), key)))
+		}
+		return next(c)
+	}
+}
+
+func trustedProxyRemote(remoteAddr string) bool {
+	host := remoteAddr
+	if splitHost, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		host = splitHost
+	}
+	addr, err := netip.ParseAddr(strings.Trim(host, "[]"))
+	if err != nil {
+		return false
+	}
+	return addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast()
 }
 
 // stripIdentifyingHeaders 尽量在应用层丢弃可识别请求头。
