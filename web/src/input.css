@@ -305,6 +305,45 @@ body {
   border-radius: 0.62rem;
 }
 
+/* 留言（离线消息）：刻意做得「不像安全气泡」——虚线红框 + 警示斜纹底 + 小直角，
+   配合破锁图标与说明文案，让用户一眼看出它比实时端到端消息更弱（服务端暂存、无前向保密）。 */
+.note-insecure {
+  max-width: min(86%, 30rem);
+  border: 2px dashed var(--color-error);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  color: var(--color-base-content);
+  background-color: rgb(244 63 94 / 0.06);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgb(244 63 94 / 0.10) 0,
+    rgb(244 63 94 / 0.10) 8px,
+    rgb(245 158 11 / 0.10) 8px,
+    rgb(245 158 11 / 0.10) 16px
+  );
+  box-shadow: none;
+}
+
+.note-insecure .note-flag {
+  color: var(--color-error);
+}
+
+/* 主题色卡：左上=底色，右下=主色，对角分割，直观预览每套主题。 */
+.theme-dot {
+  display: block;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 999px;
+  border: 1px solid rgb(0 0 0 / 0.12);
+}
+
+.theme-dot--pptter { background: linear-gradient(135deg, #ffffff 0 50%, #059f95 50% 100%); }
+.theme-dot--pptter-dark { background: linear-gradient(135deg, #1b2227 0 50%, #06c7ba 50% 100%); }
+.theme-dot--pptter-grape { background: linear-gradient(135deg, #ffffff 0 50%, #7c3aed 50% 100%); }
+.theme-dot--pptter-ocean { background: linear-gradient(135deg, #ffffff 0 50%, #0369a1 50% 100%); }
+.theme-dot--pptter-sunset { background: linear-gradient(135deg, #fffdfb 0 50%, #ea580c 50% 100%); }
+.theme-dot--pptter-mid { background: linear-gradient(135deg, #14181f 0 50%, #6366f1 50% 100%); }
+
 /* 静态头像精灵图：避免用 JS 写入 style=""，兼容严格 CSP。 */
 .avatar-sprite {
   background-color: rgb(5 159 149 / 0.35);

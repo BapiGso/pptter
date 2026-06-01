@@ -9,6 +9,7 @@
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.0",
     "daisyui": "^5.0.0",
-    "tailwindcss": "^4.1.0"
+    "tailwindcss": "^4.1.0",
+    "tweetnacl": "^1.0.3"
   }
 }

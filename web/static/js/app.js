@@ -22,8 +22,12 @@
   const {
     PROTOCOL,
     PROTOCOL_VERSION,
+    NOTE_VERSION,
+    NOTE_ALG,
+    DEFAULT_ROOM,
     MAX_TEXT_BYTES,
     MAX_RELAY_BYTES,
+    MAX_P2P_FILE_BYTES,
     RTC_CHUNK,
     REPLAY_WINDOW_MS,
     GROUP,
@@ -32,11 +36,24 @@
     TONES,
     THEMES,
     textEncoder,
+    createCrypto,
     deriveSharedKey,
+    noteKeyIKM,
+    deriveNoteKey,
+    noteSignedView,
     signedView,
     padPlaintext,
     unpadPlaintext,
     initialRoom,
+    roomFromPath,
+    normalizeRoom,
+    roomKeyFromHash,
+    normalizeRoomKey,
+    randomRoomKey,
+    roomKeyToBytes,
+    shareURL,
+    roomURL,
+    randomRoomName,
     websocketURL,
     bytesToBase64,
     base64ToBytes,
@@ -52,6 +69,8 @@
 
   const state = {
     room: initialRoom(),
+    roomKey: "",
+    roomKeyBytes: null,
     self: null,
     peers: [],
     threads: { group: [] },
@@ -66,13 +85,15 @@
     iceServers: null,
     p2pPick: false,
     socket: null,
-    identityKeyPair: null,
-    dhKeyPair: null,
+    crypto: null,
+    identity: null,
+    dh: null,
     idKeyB64: "",
     dhKeyB64: "",
     dhSigB64: "",
     sendCounter: 0,
     nextMessageID: 1,
+    seenNotes: null,
     statusText: "初始化",
     statusTone: "warn",
     reconnecting: false,
@@ -133,6 +154,18 @@
   let audioCtx = null;
   let booted = false;
   let ui = null;
+  // 会话列表里「返回公共群聊」入口的特殊 key（单连接架构下，切房间即重连）。
+  const LOBBY_KEY = "__lobby__";
+
+  // 主题色卡：key 对应 input.css 里的主题名，swatchClass 对应 .theme-dot--* 预览样式。
+  const THEME_OPTIONS = [
+    { key: "pptter", label: "青绿（亮）" },
+    { key: "pptter-dark", label: "青绿（暗）" },
+    { key: "pptter-grape", label: "葡萄紫（亮）" },
+    { key: "pptter-ocean", label: "海蓝（亮）" },
+    { key: "pptter-sunset", label: "暖橙（亮）" },
+    { key: "pptter-mid", label: "午夜蓝（暗）" },
+  ].map((t) => ({ key: t.key, label: t.label, swatchClass: "theme-dot theme-dot--" + t.key }));
 
   function boot() {
     if (booted) {
@@ -154,8 +187,11 @@
         renderConversations();
       },
       sendText: () => { void sendText(); },
+      sendNote: () => { void sendNote(); },
       select: (key) => selectConversation(key),
       reconnect: () => { void reconnect(); },
+      createRoom: () => createRoom(),
+      shareRoom: () => { void shareRoom(); },
       pickFile: () => chooseFile(false),
       p2pClick: () => { void p2pButtonClick(); },
       toggleScreenShare: () => { void toggleScreenShare(); },
@@ -257,6 +293,10 @@
     closeSocket();
   });
 
+  window.addEventListener("popstate", () => {
+    syncRoomFromLocation();
+  });
+
   window.addEventListener("pageshow", (event) => {
     if (event.persisted && booted) {
       void reconnect();
@@ -313,11 +353,16 @@
   async function init() {
     if (!window.crypto || !window.crypto.subtle) {
       setStatus("浏览器不支持加密", "bad");
-      addSystemMessage("需要支持 Web Crypto（Ed25519/X25519）的现代浏览器，建议 HTTPS 或 localhost。");
+      addSystemMessage("需要支持 Web Crypto（AES-GCM/HKDF）的现代浏览器，建议 HTTPS 或 localhost。");
       return;
     }
+    applyRoomKey(roomKeyFromHash());
     try {
       setStatus("生成密钥", "warn");
+      state.crypto = await createCrypto();
+      if (state.crypto.usingFallback) {
+        addSystemMessage("本浏览器缺少原生 Ed25519/X25519，已启用内置 nacl 回退（与原生客户端互通）。");
+      }
       await generateIdentity();
       addSystemMessage("已生成端到端加密身份，私钥只在本页内存，永不上传服务器。");
       await connect();
@@ -327,14 +372,18 @@
     }
   }
 
+  // applyRoomKey 设定当前房间的预共享密钥（来自 URL #fragment），并预算好混入 HKDF 的字节。
+  function applyRoomKey(token) {
+    state.roomKey = normalizeRoomKey(token);
+    state.roomKeyBytes = roomKeyToBytes(state.roomKey);
+  }
+
   async function generateIdentity() {
-    state.identityKeyPair = await crypto.subtle.generateKey({ name: "Ed25519" }, false, ["sign", "verify"]);
-    state.dhKeyPair = await crypto.subtle.generateKey({ name: "X25519" }, false, ["deriveBits"]);
-    const idRaw = new Uint8Array(await crypto.subtle.exportKey("raw", state.identityKeyPair.publicKey));
-    const dhRaw = new Uint8Array(await crypto.subtle.exportKey("raw", state.dhKeyPair.publicKey));
-    state.idKeyB64 = bytesToBase64(idRaw);
-    state.dhKeyB64 = bytesToBase64(dhRaw);
-    const dhSig = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, state.identityKeyPair.privateKey, dhRaw));
+    state.identity = await state.crypto.makeIdentity();
+    state.dh = await state.crypto.makeDH();
+    state.idKeyB64 = bytesToBase64(state.identity.publicRaw);
+    state.dhKeyB64 = bytesToBase64(state.dh.publicRaw);
+    const dhSig = await state.identity.sign(state.dh.publicRaw);
     state.dhSigB64 = bytesToBase64(dhSig);
   }
 
@@ -344,6 +393,7 @@
     state.unread = {};
     state.active = GROUP;
     state.self = null;
+    state.seenNotes = new Set();
     rtcReset();
     closeSocket();
     setStatus("连接中", "warn");
@@ -386,6 +436,61 @@
     }
   }
 
+  // createRoom 新建一个随机私密房间：SPA 内原地切换，不整页刷新、不开新标签。
+  // 同时生成一个高熵房间密钥放进 # 片段，使房间真正私密（须凭完整分享链接才能解密）。
+  function createRoom() {
+    void switchRoom(randomRoomName(), randomRoomKey());
+  }
+
+  // switchRoom 在不刷新页面的前提下切到另一个房间：更新 URL（房间名在路径、可选密钥在 #片段）、
+  // 重新生成匿名身份（避免服务端按身份把同一人跨房间关联），再重连。
+  async function switchRoom(name, keyToken) {
+    const room = normalizeRoom(name) || DEFAULT_ROOM;
+    const key = normalizeRoomKey(keyToken);
+    if (state.reconnecting || (room === state.room && key === state.roomKey)) {
+      return;
+    }
+    state.reconnecting = true;
+    try {
+      state.room = room;
+      applyRoomKey(key);
+      try {
+        const path = "/r/" + encodeURIComponent(room) + (key ? "#k=" + encodeURIComponent(key) : "");
+        history.pushState({}, "", path);
+      } catch {
+        // 某些环境（file://）不允许 pushState，忽略即可。
+      }
+      await generateIdentity();
+      await connect();
+    } finally {
+      state.reconnecting = false;
+    }
+  }
+
+  // 浏览器前进/后退时，按地址栏里的房间名 + #密钥原地切换。
+  function syncRoomFromLocation() {
+    const room = roomFromPath(location.pathname);
+    const key = roomKeyFromHash();
+    if (room && (room !== state.room || key !== state.roomKey)) {
+      void switchRoom(room, key);
+    }
+  }
+
+  // shareRoom 复制当前房间的可分享链接（含房间密钥的 # 片段，若有）。
+  async function shareRoom() {
+    const url = shareURL(state.room, state.roomKey);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+        showToast("房间链接已复制");
+        return;
+      }
+    } catch {
+      // 回退到 prompt。
+    }
+    window.prompt("复制房间链接：", url);
+  }
+
   function closeSocket() {
     if (!state.socket) {
       return;
@@ -413,6 +518,7 @@
       case "peer_joined": await addPeer(frame.peer, true); break;
       case "peer_left": handlePeerLeft(frame.id); break;
       case "ciphertext": await handleCiphertext(frame); break;
+      case "note": await handleNoteFrame(frame); break;
     }
   }
 
@@ -425,9 +531,15 @@
       await addPeer(peer, false);
     }
     setStatus("已连接", "ok");
-    addSystemMessage("已进入群聊「" + state.room + "」，当前 " + memberCountText() + " 人在线。");
+    addSystemMessage("已进入" + groupTitle() + "，当前 " + memberCountText() + " 人在线。");
     if (state.nick && state.peers.length > 0) {
       void sendContent({ k: "p" }, { broadcast: true, silent: true });
+    }
+    // 房间信箱里暂存的留言（离线消息），随 welcome 一起带来，逐条验签解密后展示。
+    if (Array.isArray(frame.notes)) {
+      for (const noteString of frame.notes) {
+        await ingestNote(noteString, false);
+      }
     }
     renderConversations();
   }
@@ -470,12 +582,11 @@
   }
 
   async function tryOpenFromPeer(peer, envelope) {
-    if (!peer.idVerifyKey || !peer.dhPublicKey || envelope.v !== PROTOCOL_VERSION) {
+    if (!peer.idVerifier || !peer.dhRaw || envelope.v !== PROTOCOL_VERSION) {
       return false;
     }
     const selfID = state.self ? state.self.id : "";
-    const sigOK = await crypto.subtle.verify(
-      { name: "Ed25519" }, peer.idVerifyKey, base64ToBytes(envelope.sig), signedView(envelope, selfID));
+    const sigOK = await peer.idVerifier.verify(base64ToBytes(envelope.sig), signedView(envelope, selfID));
     if (!sigOK) {
       return false;
     }
@@ -523,7 +634,7 @@
   }
 
   async function decryptFromPeer(peer, envelope) {
-    const aesKey = await deriveSharedKey(state.dhKeyPair.privateKey, peer.dhPublicKey, base64ToBytes(envelope.salt));
+    const aesKey = await deriveSharedKey(state.dh, peer.dhRaw, base64ToBytes(envelope.salt), state.roomKeyBytes);
     const ivBytes = base64ToBytes(envelope.iv);
     const ciphertextBytes = base64ToBytes(envelope.ct);
     const paddedBuffer = await crypto.subtle.decrypt({ name: "AES-GCM", iv: ivBytes }, aesKey, ciphertextBytes);
@@ -548,14 +659,13 @@
     try {
       const idRaw = base64ToBytes(peer.idKey);
       const dhRaw = base64ToBytes(peer.dhKey);
-      const idVerifyKey = await crypto.subtle.importKey("raw", idRaw, { name: "Ed25519" }, true, ["verify"]);
-      const dhSigOK = await crypto.subtle.verify({ name: "Ed25519" }, idVerifyKey, base64ToBytes(peer.dhSig), dhRaw);
+      const idVerifier = await state.crypto.importVerifier(idRaw);
+      const dhSigOK = await idVerifier.verify(base64ToBytes(peer.dhSig), dhRaw);
       if (!dhSigOK) {
         addSystemMessage("成员 " + shortID(peer.id) + " 的会话公钥签名异常，已拒绝（疑似中间人）。");
         return;
       }
-      const dhPublicKey = await crypto.subtle.importKey("raw", dhRaw, { name: "X25519" }, true, []);
-      state.peers.push({ id: peer.id, idVerifyKey, dhPublicKey, lastCounter: 0, name: "" });
+      state.peers.push({ id: peer.id, idVerifier, dhRaw, lastCounter: 0, name: "" });
       if (!state.threads[peer.id]) {
         state.threads[peer.id] = [];
       }
@@ -682,7 +792,7 @@
   async function sealForPeer(peer, paddedBytes, ctr, ts, scope) {
     const saltBytes = crypto.getRandomValues(new Uint8Array(16));
     const ivBytes = crypto.getRandomValues(new Uint8Array(12));
-    const aesKey = await deriveSharedKey(state.dhKeyPair.privateKey, peer.dhPublicKey, saltBytes);
+    const aesKey = await deriveSharedKey(state.dh, peer.dhRaw, saltBytes, state.roomKeyBytes);
     const ciphertextBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv: ivBytes }, aesKey, paddedBytes);
     const envelope = {
       v: PROTOCOL_VERSION,
@@ -694,7 +804,7 @@
       iv: bytesToBase64(ivBytes),
       ct: bytesToBase64(new Uint8Array(ciphertextBuffer)),
     };
-    const sig = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, state.identityKeyPair.privateKey, signedView(envelope, peer.id)));
+    const sig = await state.identity.sign(signedView(envelope, peer.id));
     envelope.sig = bytesToBase64(sig);
     return JSON.stringify(envelope);
   }
@@ -717,9 +827,155 @@
     return null;
   }
 
+  // ---- 留言（离线消息）：房间密钥加密 + 服务端内存暂存。比实时端到端更弱，UI 会醒目区分。 ----
+
+  // sendNote 把当前输入框文本作为一条留言加密后投到房间信箱（不需要对方在线）。
+  async function sendNote() {
+    const text = (ui ? ui.draft : "").trim();
+    if (!text || !canSend()) {
+      return;
+    }
+    if (textEncoder.encode(text).length > MAX_TEXT_BYTES) {
+      addSystemMessage("留言过长，未发送。");
+      return;
+    }
+    try {
+      const noteString = await sealNote({ k: "t", t: text, n: state.nick || "" });
+      state.socket.send(JSON.stringify({ type: "note_put", note: noteString }));
+      // 服务端不会把留言回送给发送者，这里本地回显；记下签名避免重连后从 welcome 再渲染一次。
+      state.seenNotes.add(noteSig(noteString));
+      addNoteMessage({ text, author: selfName(), authorId: state.self ? state.self.id : "self", fromSelf: true, ts: Date.now() });
+      if (ui) {
+        ui.draft = "";
+      }
+      showToast(isDefaultRoom() ? "留言已留下（公开房间·服务端可读）" : "留言已留在房间（服务端暂存密文）");
+    } catch (error) {
+      addSystemMessage("留言失败：" + safeError(error));
+    }
+  }
+
+  async function sealNote(content) {
+    const ikm = noteKeyIKM(state.room, state.roomKeyBytes);
+    const saltBytes = crypto.getRandomValues(new Uint8Array(16));
+    const ivBytes = crypto.getRandomValues(new Uint8Array(12));
+    const aesKey = await deriveNoteKey(ikm, saltBytes);
+    const bytes = textEncoder.encode(JSON.stringify(content));
+    const padded = padPlaintext(bytes);
+    try {
+      const ctBuffer = await crypto.subtle.encrypt({ name: "AES-GCM", iv: ivBytes }, aesKey, padded);
+      const envelope = {
+        v: NOTE_VERSION,
+        alg: NOTE_ALG,
+        ts: Date.now(),
+        idKey: state.idKeyB64,
+        salt: bytesToBase64(saltBytes),
+        iv: bytesToBase64(ivBytes),
+        ct: bytesToBase64(new Uint8Array(ctBuffer)),
+      };
+      const sig = await state.identity.sign(noteSignedView(envelope));
+      envelope.sig = bytesToBase64(sig);
+      return JSON.stringify(envelope);
+    } finally {
+      wipeBytes(bytes);
+      wipeBytes(padded);
+    }
+  }
+
+  // ingestNote 验签 + 用房间密钥解密一条留言并展示。房间密钥不对/被篡改时解不开，静默跳过。
+  async function ingestNote(noteString, live) {
+    let env;
+    try {
+      env = JSON.parse(noteString);
+    } catch {
+      return;
+    }
+    if (!env || env.v !== NOTE_VERSION || typeof env.sig !== "string" || typeof env.idKey !== "string") {
+      return;
+    }
+    if (state.seenNotes.has(env.sig)) {
+      return;
+    }
+    let verifier;
+    try {
+      verifier = await state.crypto.importVerifier(base64ToBytes(env.idKey));
+    } catch {
+      return;
+    }
+    const sigOK = await verifier.verify(base64ToBytes(env.sig), noteSignedView(env));
+    if (!sigOK) {
+      return;
+    }
+    let content;
+    try {
+      const aesKey = await deriveNoteKey(noteKeyIKM(state.room, state.roomKeyBytes), base64ToBytes(env.salt));
+      const buffer = await crypto.subtle.decrypt({ name: "AES-GCM", iv: base64ToBytes(env.iv) }, aesKey, base64ToBytes(env.ct));
+      const padded = new Uint8Array(buffer);
+      let json;
+      try {
+        json = unpadPlaintext(padded);
+      } finally {
+        wipeBytes(padded);
+      }
+      content = JSON.parse(json);
+    } catch {
+      return;
+    }
+    if (!content || content.k !== "t" || typeof content.t !== "string") {
+      return;
+    }
+    state.seenNotes.add(env.sig);
+    const authorId = await noteAuthorId(env.idKey);
+    if (state.self && authorId === state.self.id) {
+      return; // 自己的留言已本地回显，避免重复。
+    }
+    const nick = content.n && String(content.n).trim();
+    addNoteMessage({ text: content.t, author: nick || shortID(authorId), authorId, fromSelf: false, ts: Number(env.ts) || Date.now() });
+    if (live) {
+      maybeBeep();
+    }
+  }
+
+  async function handleNoteFrame(frame) {
+    if (frame && typeof frame.note === "string") {
+      await ingestNote(frame.note, true);
+    }
+  }
+
+  function addNoteMessage(info) {
+    addChatMessage(GROUP, {
+      id: 0, system: false, note: true, insecure: true, ts: info.ts || Date.now(),
+      fromSelf: !!info.fromSelf, from: info.authorId || "note",
+      author: info.author || "匿名", kind: "note", text: info.text || "",
+      time: formatTime(new Date(info.ts || Date.now())),
+    });
+  }
+
+  // noteAuthorId 复刻服务端 publicKeyID：base64url(SHA-256(idKey 字符串))，使留言作者头像与其实时消息一致。
+  async function noteAuthorId(idKeyB64) {
+    try {
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", textEncoder.encode(idKeyB64)));
+      return bytesToBase64(digest).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    } catch {
+      return "";
+    }
+  }
+
+  function noteSig(noteString) {
+    try {
+      return JSON.parse(noteString).sig || "";
+    } catch {
+      return "";
+    }
+  }
+
   // ---- 会话与状态 ----
 
   function selectConversation(key) {
+    // 「公共群聊」入口：单连接架构下，回大厅等于切到默认房间并重连。
+    if (key === LOBBY_KEY) {
+      void switchRoom(DEFAULT_ROOM, "");
+      return;
+    }
     state.active = key;
     state.unread[key] = 0;
     if (key === GROUP) {
@@ -759,8 +1015,16 @@
     }
   }
 
+  function isDefaultRoom() {
+    return state.room === DEFAULT_ROOM;
+  }
+
+  function groupTitle() {
+    return isDefaultRoom() ? "公共群聊 · 开放" : "私密群聊「" + state.room + "」";
+  }
+
   function conversationTitle() {
-    return state.active === GROUP ? "群聊「" + state.room + "」" : peerName(state.active) + " · 私聊";
+    return state.active === GROUP ? groupTitle() : peerName(state.active) + " · 私聊";
   }
 
   // peerName 返回成员的显示名：优先对方设置的昵称，否则回退匿名短 ID。
@@ -810,6 +1074,9 @@
       state.threads[convoKey] = [];
     }
     message.id = state.nextMessageID++;
+    if (!message.ts) {
+      message.ts = Date.now();
+    }
     state.threads[convoKey].push(message);
     trimThread(convoKey);
     if (convoKey === state.active) {
@@ -827,7 +1094,7 @@
       state.threads[key] = [];
     }
     state.threads[key].push({
-      id: state.nextMessageID++, system: true, fromSelf: false,
+      id: state.nextMessageID++, system: true, fromSelf: false, ts: Date.now(),
       from: "system", author: "系统", kind: "text", text: text, time: formatTime(new Date()),
     });
     trimThread(key);
@@ -870,6 +1137,7 @@
     ui.stun = state.stun;
     ui.theme = document.documentElement.dataset.theme || "pptter";
     ui.isDark = isDarkTheme(ui.theme);
+    ui.themeOptions = themeOptionViews();
     ui.backgroundImage = state.backgroundImage;
   }
 
@@ -885,6 +1153,7 @@
     ui.statusText = statusDisplayText();
     ui.statusDotClass = connecting ? "bg-warning" : state.statusTone === "ok" ? "bg-success" : state.statusTone === "bad" ? "bg-error" : "bg-warning";
     ui.sendDisabled = !canSend();
+    ui.noteHidden = state.active !== GROUP;
     ui.inputPlaceholder = state.active === GROUP ? "群聊消息，本地加密后发送" : "私聊消息，仅对方可解密";
     ui.p2pHidden = !inDM;
     ui.p2pConnected = connected;
@@ -924,10 +1193,21 @@
     const list = [{
       key: GROUP,
       isGroup: true,
-      title: "群聊 (" + memberCountText() + ")",
+      title: (isDefaultRoom() ? "公共群聊 · 开放" : "私密群聊") + " (" + memberCountText() + ")",
       preview: threadPreview(GROUP),
       unread: state.unread[GROUP] || 0,
     }];
+
+    // 身处私密房间时，始终保留一个「公共群聊」入口，点击即可切回公共大厅。
+    if (!isDefaultRoom()) {
+      list.unshift({
+        key: LOBBY_KEY,
+        isGroup: true,
+        title: "公共群聊",
+        preview: "点此返回公共大厅",
+        unread: 0,
+      });
+    }
 
     for (const peer of filteredPeers()) {
       const avatar = avatarModel(peer.id, shortID(peer.id).slice(0, 2));
@@ -948,6 +1228,21 @@
   function messageView(message) {
     if (message.system) {
       return { id: message.id, system: true, text: message.text };
+    }
+
+    if (message.note) {
+      const avatar = avatarModel(message.from, "");
+      return {
+        id: message.id,
+        system: false,
+        note: true,
+        fromSelf: !!message.fromSelf,
+        author: message.author,
+        timeText: message.time,
+        text: message.text || "",
+        avatarClass: avatar.avatarClass,
+        insecureLabel: isDefaultRoom() ? "留言 · 公开房间 · 服务端可读" : "留言 · 服务端暂存密文 · 无前向保密",
+      };
     }
 
     const avatar = avatarModel(message.from, shortID(message.from).slice(0, 2));
@@ -1017,11 +1312,41 @@
     }
   }
 
+  function startOfDay(ts) {
+    const d = new Date(ts);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  function dayLabel(ts) {
+    const diff = Math.round((startOfDay(Date.now()) - startOfDay(ts)) / 86400000);
+    if (diff <= 0) {
+      return "今天";
+    }
+    if (diff === 1) {
+      return "昨天";
+    }
+    const d = new Date(ts);
+    return (d.getMonth() + 1) + "月" + d.getDate() + "日";
+  }
+
   function renderMessages() {
     const list = state.threads[state.active] || [];
-    if (ui) {
-      ui.messages = list.map(messageView);
+    if (!ui) {
+      return;
     }
+    const out = [];
+    let lastDay = "";
+    for (const message of list) {
+      const ts = message.ts || Date.now();
+      const key = String(startOfDay(ts));
+      if (key !== lastDay) {
+        out.push({ id: "sep-" + key, separator: true, text: dayLabel(ts) });
+        lastDay = key;
+      }
+      out.push(messageView(message));
+    }
+    ui.messages = out;
   }
 
   function showToast(text) {
@@ -1124,12 +1449,22 @@
     showToast(name ? "昵称已更新" : "已清除昵称");
   }
 
+  function themeOptionViews() {
+    const current = document.documentElement.dataset.theme || "pptter";
+    return THEME_OPTIONS.map((t) => ({
+      key: t.key,
+      label: t.label,
+      dotClass: t.swatchClass + (t.key === current ? " ring-2 ring-primary ring-offset-2 ring-offset-base-100" : ""),
+    }));
+  }
+
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
     saveSetting("theme", theme);
     if (ui) {
       ui.theme = theme;
       ui.isDark = isDarkTheme(theme);
+      ui.themeOptions = themeOptionViews();
     }
   }
 
@@ -2164,23 +2499,30 @@
       try { msg = JSON.parse(data); } catch { return; }
       if (msg.t === "meta") {
         const transferId = msg.id || transferID();
+        const declaredSize = Number(msg.size) || 0;
+        // 接收端会把所有分片缓存在内存里，必须在 meta 阶段就拒绝超大声明，
+        // 否则对端只需谎报一个巨大 size 就能诱导本端无上限地累积内存。
+        if (!Number.isFinite(declaredSize) || declaredSize < 0 || declaredSize > MAX_P2P_FILE_BYTES) {
+          rejectIncomingTransfer(transferId, "文件超出 " + humanSize(MAX_P2P_FILE_BYTES) + " 上限");
+          return;
+        }
         let message = findTransferByID(rtc.peerId, transferId);
         if (!message) {
           message = addChatMessage(rtc.peerId, {
             id: 0, system: false, fromSelf: false, from: rtc.peerId,
             author: peerName(rtc.peerId), time: formatTime(new Date()),
             kind: "file", mime: msg.mime || "application/octet-stream", name: msg.name || "file",
-            size: Number(msg.size) || 0, url: "", p2p: true,
-            transfer: createTransfer("recv", Number(msg.size) || 0, TRANSFER_STATUS.RECEIVING),
+            size: declaredSize, url: "", p2p: true,
+            transfer: createTransfer("recv", declaredSize, TRANSFER_STATUS.RECEIVING),
           });
           message.transfer.id = transferId;
         } else {
-          updateTransfer(message, { status: TRANSFER_STATUS.RECEIVING, loaded: 0, total: Number(msg.size) || 0, error: "", checksum: "" });
+          updateTransfer(message, { status: TRANSFER_STATUS.RECEIVING, loaded: 0, total: declaredSize, error: "", checksum: "" });
         }
         rtc.recv = {
           id: transferId,
           name: msg.name,
-          size: Number(msg.size) || 0,
+          size: declaredSize,
           mime: msg.mime || "application/octet-stream",
           chunks: [],
           received: 0,
@@ -2201,10 +2543,43 @@
       return;
     }
     if (rtc.recv && data instanceof ArrayBuffer) {
+      // 防止对端持续发送超过声明大小的分片把内存撑爆：超出即中止并回收。
+      if (rtc.recv.received + data.byteLength > rtc.recv.size) {
+        const message = rtc.recv.message;
+        rtc.recv = null;
+        updateTransfer(message, { status: TRANSFER_STATUS.FAILED, error: "数据超出声明大小" });
+        if (rtc.channel && rtc.channel.readyState === "open") {
+          try { rtc.channel.send(JSON.stringify({ t: "cancel", id: message.transfer ? message.transfer.id : "" })); } catch { /* 忽略 */ }
+        }
+        return;
+      }
       rtc.recv.chunks.push(data);
       rtc.recv.received += data.byteLength;
       rtc.recv.checksum = checksumUpdate(rtc.recv.checksum, new Uint8Array(data));
       updateTransfer(rtc.recv.message, { status: TRANSFER_STATUS.RECEIVING, loaded: rtc.recv.received });
+    }
+  }
+
+  // rejectIncomingTransfer 在 meta 阶段拒绝非法/超大文件：本端不开任何接收缓冲，
+  // 同时通知对端取消，避免对端继续发送分片。
+  function rejectIncomingTransfer(transferId, reason) {
+    let message = findTransferByID(rtc.peerId, transferId);
+    if (!message) {
+      message = addChatMessage(rtc.peerId, {
+        id: 0, system: false, fromSelf: false, from: rtc.peerId,
+        author: peerName(rtc.peerId), time: formatTime(new Date()),
+        kind: "file", mime: "application/octet-stream", name: "file",
+        size: 0, url: "", p2p: true,
+        transfer: createTransfer("recv", 0, TRANSFER_STATUS.FAILED),
+      });
+      message.transfer.id = transferId;
+    }
+    updateTransfer(message, { status: TRANSFER_STATUS.FAILED, error: reason });
+    if (rtc.recv && rtc.recv.id === transferId) {
+      rtc.recv = null;
+    }
+    if (rtc.channel && rtc.channel.readyState === "open") {
+      try { rtc.channel.send(JSON.stringify({ t: "cancel", id: transferId })); } catch { /* 忽略 */ }
     }
   }
 

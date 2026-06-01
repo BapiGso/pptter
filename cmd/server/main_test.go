@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v5"
 
+	"pptter/internal/relay"
 	"pptter/internal/stunserver"
 )
 
@@ -203,6 +204,28 @@ func TestStripIdentifyingHeadersKeepsStrictCSPWithStun(test *testing.T) {
 	}
 	if got := recorder.Header().Get("Strict-Transport-Security"); got != "max-age=31536000; includeSubDomains" {
 		test.Fatalf("Strict-Transport-Security = %q, want max-age=31536000; includeSubDomains", got)
+	}
+}
+
+func TestCaptureClientKeyBeforeStrippingProxyHeaders(test *testing.T) {
+	echoServer := echo.New()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.RemoteAddr = "127.0.0.1:45678"
+	request.Header.Set("X-Forwarded-For", "2001:db8:1234:5678::abcd")
+	recorder := httptest.NewRecorder()
+	echoContext := echoServer.NewContext(request, recorder)
+
+	handler := captureClientKey(stripIdentifyingHeaders(func(echoContext *echo.Context) error {
+		if got := echoContext.Request().Header.Get("X-Forwarded-For"); got != "" {
+			test.Fatalf("X-Forwarded-For header = %q, want stripped", got)
+		}
+		if got := relay.ClientKeyFromRequest(echoContext.Request()); got != "2001:db8:1234:5678::/64" {
+			test.Fatalf("client key = %q, want IPv6 /64 from trusted proxy header", got)
+		}
+		return echoContext.NoContent(http.StatusNoContent)
+	}))
+	if err := handler(echoContext); err != nil {
+		test.Fatalf("run middleware chain: %v", err)
 	}
 }
 

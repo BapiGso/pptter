@@ -100,7 +100,7 @@ go test ./...                # 缓存受限时：GOCACHE=$(pwd)/.gocache go test
 
 | 路径 | 说明 |
 | --- | --- |
-| `GET /` `/index.html` | SPA |
+| `GET /` `/index.html` `/r/:room` | SPA |
 | `GET /ws/:room` | WebSocket 入口 |
 | `GET /webrtc-config` | `{"enabled":true,"stunPort":3478,"stunHost":"..."}` |
 | `GET /healthz` | 204 |
@@ -118,7 +118,7 @@ go test ./...                # 缓存受限时：GOCACHE=$(pwd)/.gocache go test
 {"type":"ciphertext","from":"sender id","payload":"ciphertext b64"}
 ```
 
-`payload` 对服务端不透明，写入 WS 后对持有密文尽力清零。
+`payload` 对服务端不透明，写入 WS 后对持有密文尽力清零。转发层带全局、房间与内存 client-key 限速；client-key 只用于 TTL 黑名单，不写盘、不输出日志。
 
 </details>
 

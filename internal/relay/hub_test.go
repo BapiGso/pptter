@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -94,13 +95,220 @@ func TestHubRelaysCiphertextOnlyToDestination(t *testing.T) {
 	}
 }
 
+func TestHubRejectsRoomsAboveGlobalLimit(t *testing.T) {
+	server := newTestServerWithConfig(func(cfg Config) Config {
+		cfg.MaxRooms = 1
+		cfg.MaxClients = 5
+		cfg.ClientJoinBurst = 5
+		cfg.GlobalJoinBurst = 5
+		return cfg
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	connA := dialTestClient(t, ctx, server.URL, "room-alpha", "id-key-A", "dh-key-A", "dh-sig-A")
+	defer connA.Close(websocket.StatusNormalClosure, "")
+
+	var welcomeA welcomeFrame
+	readJSONFrame(t, ctx, connA, &welcomeA)
+
+	connB, response, err := dialRawTestClient(ctx, server.URL, "room-beta")
+	if connB != nil {
+		_ = connB.Close(websocket.StatusNormalClosure, "")
+	}
+	if err == nil {
+		t.Fatal("dial second room succeeded, want rejection")
+	}
+	if response == nil || response.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("second room response status = %v, want 429", responseStatus(response))
+	}
+}
+
+func TestHubBlacklistsClientAfterJoinBurst(t *testing.T) {
+	server := newTestServerWithConfig(func(cfg Config) Config {
+		cfg.MaxRooms = 5
+		cfg.MaxClients = 5
+		cfg.GlobalJoinBurst = 5
+		cfg.ClientJoinBurst = 1
+		cfg.ClientJoinRate = 1
+		cfg.ClientBlacklistTTL = time.Minute
+		return cfg
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	connA := dialTestClient(t, ctx, server.URL, "room-alpha", "id-key-A", "dh-key-A", "dh-sig-A")
+	defer connA.Close(websocket.StatusNormalClosure, "")
+
+	var welcomeA welcomeFrame
+	readJSONFrame(t, ctx, connA, &welcomeA)
+
+	connB, response, err := dialRawTestClient(ctx, server.URL, "room-alpha")
+	if connB != nil {
+		_ = connB.Close(websocket.StatusNormalClosure, "")
+	}
+	if err == nil {
+		t.Fatal("second burst join succeeded, want client blacklist rejection")
+	}
+	if response == nil || response.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("blacklist response status = %v, want 429", responseStatus(response))
+	}
+}
+
 func newTestServer() *httptest.Server {
+	return newTestServerWithConfig(func(cfg Config) Config { return cfg })
+}
+
+func dialNote(t *testing.T, ctx context.Context, baseURL, room, suffix string) *websocket.Conn {
+	t.Helper()
+	conn := dialTestClient(t, ctx, baseURL, room, "id-key-"+suffix, "dh-key-"+suffix, "dh-sig-"+suffix)
+	var welcome welcomeFrame
+	readJSONFrame(t, ctx, conn, &welcome)
+	return conn
+}
+
+func TestHubStoresBroadcastsAndDeliversNotes(t *testing.T) {
+	server := newTestServer()
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	connA := dialNote(t, ctx, server.URL, "room-notes", "A")
+	connB := dialNote(t, ctx, server.URL, "room-notes", "B")
+
+	// A 收到 B 加入的 peer_joined，先排掉。
+	var joined peerJoinedFrame
+	readJSONFrame(t, ctx, connA, &joined)
+
+	writeJSONFrame(t, ctx, connA, notePutEnvelope{Type: "note_put", Note: json.RawMessage(`"note-one"`)})
+
+	// 在线成员 B 实时收到留言（同时作为「已入信箱」的屏障）。
+	var live noteFrame
+	readJSONFrame(t, ctx, connB, &live)
+	if live.Type != "note" || string(live.Note) != `"note-one"` {
+		t.Fatalf("B live note = %+v, want type note with note-one", live)
+	}
+
+	// 晚到的 C 通过 welcome 拿到信箱里的留言。
+	connC := dialTestClient(t, ctx, server.URL, "room-notes", "id-key-C", "dh-key-C", "dh-sig-C")
+	var welcomeC welcomeFrame
+	readJSONFrame(t, ctx, connC, &welcomeC)
+	if len(welcomeC.Notes) != 1 || string(welcomeC.Notes[0]) != `"note-one"` {
+		t.Fatalf("C welcome notes = %v, want [note-one]", welcomeC.Notes)
+	}
+
+	// 全员离开，房间应因仍有未过期留言而保留；新来的 D 仍能取到。
+	_ = connA.Close(websocket.StatusNormalClosure, "")
+	_ = connB.Close(websocket.StatusNormalClosure, "")
+	_ = connC.Close(websocket.StatusNormalClosure, "")
+
+	connD := dialTestClient(t, ctx, server.URL, "room-notes", "id-key-D", "dh-key-D", "dh-sig-D")
+	defer connD.Close(websocket.StatusNormalClosure, "")
+	var welcomeD welcomeFrame
+	readJSONFrame(t, ctx, connD, &welcomeD)
+	if len(welcomeD.Notes) != 1 || string(welcomeD.Notes[0]) != `"note-one"` {
+		t.Fatalf("D welcome notes after empty room = %v, want [note-one]", welcomeD.Notes)
+	}
+}
+
+func TestHubExpiredNotesNotDelivered(t *testing.T) {
+	server := newTestServerWithConfig(func(cfg Config) Config {
+		cfg.NoteTTL = 40 * time.Millisecond
+		return cfg
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	connA := dialNote(t, ctx, server.URL, "room-ttl", "A")
+	connB := dialNote(t, ctx, server.URL, "room-ttl", "B")
+	var joined peerJoinedFrame
+	readJSONFrame(t, ctx, connA, &joined)
+
+	writeJSONFrame(t, ctx, connA, notePutEnvelope{Type: "note_put", Note: json.RawMessage(`"stale"`)})
+	var live noteFrame
+	readJSONFrame(t, ctx, connB, &live) // 屏障：留言已入信箱。
+
+	time.Sleep(80 * time.Millisecond) // 超过 TTL。
+
+	connC := dialTestClient(t, ctx, server.URL, "room-ttl", "id-key-C", "dh-key-C", "dh-sig-C")
+	defer connC.Close(websocket.StatusNormalClosure, "")
+	var welcomeC welcomeFrame
+	readJSONFrame(t, ctx, connC, &welcomeC)
+	if len(welcomeC.Notes) != 0 {
+		t.Fatalf("C welcome notes after TTL = %v, want none", welcomeC.Notes)
+	}
+
+	_ = connA.Close(websocket.StatusNormalClosure, "")
+	_ = connB.Close(websocket.StatusNormalClosure, "")
+}
+
+func TestHubDropsOldestNoteAbovePerRoomCap(t *testing.T) {
+	server := newTestServerWithConfig(func(cfg Config) Config {
+		cfg.MaxNotesPerRoom = 2
+		return cfg
+	})
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	connA := dialNote(t, ctx, server.URL, "room-cap", "A")
+	connB := dialNote(t, ctx, server.URL, "room-cap", "B")
+	var joined peerJoinedFrame
+	readJSONFrame(t, ctx, connA, &joined)
+
+	for _, note := range []string{`"n1"`, `"n2"`, `"n3"`} {
+		writeJSONFrame(t, ctx, connA, notePutEnvelope{Type: "note_put", Note: json.RawMessage(note)})
+		var live noteFrame
+		readJSONFrame(t, ctx, connB, &live) // 逐条确认已入信箱。
+	}
+
+	connC := dialTestClient(t, ctx, server.URL, "room-cap", "id-key-C", "dh-key-C", "dh-sig-C")
+	defer connC.Close(websocket.StatusNormalClosure, "")
+	var welcomeC welcomeFrame
+	readJSONFrame(t, ctx, connC, &welcomeC)
+	if len(welcomeC.Notes) != 2 || string(welcomeC.Notes[0]) != `"n2"` || string(welcomeC.Notes[1]) != `"n3"` {
+		t.Fatalf("C welcome notes = %v, want newest two [n2 n3]", welcomeC.Notes)
+	}
+
+	_ = connA.Close(websocket.StatusNormalClosure, "")
+	_ = connB.Close(websocket.StatusNormalClosure, "")
+}
+
+func TestHubRejectsInvalidNotePut(t *testing.T) {
+	server := newTestServer()
+	defer server.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	connA := dialNote(t, ctx, server.URL, "room-bad", "A")
+	defer connA.Close(websocket.StatusNormalClosure, "")
+
+	// note 不是 JSON 字符串值（这里是数字）→ 服务端按策略违规关闭连接。
+	writeJSONFrame(t, ctx, connA, notePutEnvelope{Type: "note_put", Note: json.RawMessage(`12345`)})
+
+	if _, _, err := connA.Read(ctx); err == nil {
+		t.Fatal("read after invalid note_put succeeded, want connection closed")
+	}
+}
+
+
+func newTestServerWithConfig(configure func(Config) Config) *httptest.Server {
 	e := echo.New()
 	e.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 	cfg := NewConfig()
 	cfg.HandshakeTimeout = time.Second
 	cfg.WriteTimeout = time.Second
+	cfg = configure(cfg)
 
 	hub := NewHub(cfg)
 	e.GET("/ws/:room", hub.HandleWebSocket)
@@ -111,8 +319,7 @@ func newTestServer() *httptest.Server {
 func dialTestClient(t *testing.T, ctx context.Context, baseURL, room, idKey, dhKey, dhSig string) *websocket.Conn {
 	t.Helper()
 
-	wsURL := "ws" + strings.TrimPrefix(baseURL, "http") + "/ws/" + room
-	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	conn, _, err := dialRawTestClient(ctx, baseURL, room)
 	if err != nil {
 		t.Fatalf("dial websocket: %v", err)
 	}
@@ -125,6 +332,18 @@ func dialTestClient(t *testing.T, ctx context.Context, baseURL, room, idKey, dhK
 	})
 
 	return conn
+}
+
+func dialRawTestClient(ctx context.Context, baseURL string, room string) (*websocket.Conn, *http.Response, error) {
+	wsURL := "ws" + strings.TrimPrefix(baseURL, "http") + "/ws/" + room
+	return websocket.Dial(ctx, wsURL, nil)
+}
+
+func responseStatus(response *http.Response) any {
+	if response == nil {
+		return nil
+	}
+	return response.StatusCode
 }
 
 func readJSONFrame(t *testing.T, ctx context.Context, conn *websocket.Conn, dest any) {
