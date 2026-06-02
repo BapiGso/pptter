@@ -25,7 +25,7 @@
 
       <!-- 图标侧栏 -->
       <aside class="hidden md:flex glass-teal-strong w-16 flex-col items-center gap-3 py-4 shrink-0">
-        <button class="btn btn-circle btn-ghost p-0" type="button" title="我的设置" x-on:click="openSettings">
+        <button class="btn btn-circle btn-ghost" type="button" title="我的设置" x-on:click="openSettings">
           <span class="size-9 grid place-items-center rounded-full text-xs font-extrabold uppercase text-white bg-white/30 select-none" :class="selfAvatarClass" x-text="selfAvatarText">我</span>
         </button>
         <div class="flex-1"></div>
@@ -47,7 +47,7 @@
         :class="{ '-translate-x-full': !menuOpen }">
         <!-- 移动端操作行：替代被隐藏的图标侧栏 -->
         <div class="flex items-center gap-1 px-2.5 pt-2.5 md:hidden">
-          <button class="btn btn-circle btn-ghost btn-sm p-0" type="button" title="我的设置" x-on:click="openSettings">
+          <button class="btn btn-circle btn-ghost btn-sm" type="button" title="我的设置" x-on:click="openSettings">
             <span class="size-8 grid place-items-center rounded-full text-xs font-extrabold uppercase text-white bg-white/30 select-none" :class="selfAvatarClass" x-text="selfAvatarText">我</span>
           </button>
           <span class="flex-1"></span>
@@ -78,7 +78,7 @@
         <div class="flex flex-col overflow-y-auto scroll-thin flex-1 gap-px pb-1">
           <template x-for="c in conversations" :key="c.key">
             <button type="button"
-              class="flex items-center gap-3 px-3.5 py-2.5 text-left text-white shrink-0 w-auto hover:bg-white/10"
+              class="flex items-center gap-3 px-3.5 py-2.5 text-left text-white shrink-0 hover:bg-white/10"
               :class="{ 'bg-white/20': active === c.key }" x-on:click="select(c.key)">
               <span x-show="c.isGroup" class="size-11 grid shrink-0 place-items-center rounded-full bg-white/25 text-white font-extrabold">群</span>
               <span x-show="!c.isGroup" :class="c.avatarClass" class="size-11 grid shrink-0 place-items-center rounded-full text-xs font-extrabold uppercase text-white select-none" x-text="c.text"></span>
@@ -235,7 +235,7 @@
                   <div :class="m.bubbleClass">
                     <span :class="{ 'hidden': !m.isText }" class="chat-text" x-text="m.text"></span>
                     <template x-if="m.isImage">
-                      <img :src="m.src" class="max-w-[min(70vw,18rem)] max-h-[18rem] h-auto w-auto cursor-zoom-in" alt="图片" loading="lazy" x-on:click="showImage(m.src)">
+                      <img :src="m.src" class="max-w-[min(70vw,18rem)] max-h-[18rem] cursor-zoom-in" alt="图片" loading="lazy" x-on:click="showImage(m.src)">
                     </template>
                     <template x-if="m.isFile">
                       <div class="min-w-[10rem] max-w-[min(70vw,18rem)] px-2.5 py-2">
@@ -309,13 +309,12 @@
   </div>
 
   <!-- 设置弹窗 -->
-  <div x-cloak :class="{ 'hidden': !settingsOpen }" class="fixed inset-0 z-[80] grid place-items-center bg-black/40 p-4" x-on:click.self="settingsOpen = false">
-    <div class="card bg-base-100 text-base-content w-full max-w-md shadow-2xl max-h-[88vh] overflow-y-auto scroll-thin">
-      <div class="card-body gap-5">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-bold m-0">我的设置</h2>
-          <button class="btn btn-sm btn-circle btn-ghost" type="button" x-on:click="settingsOpen = false">✕</button>
-        </div>
+  <dialog class="modal" x-ref="settingsDialog">
+    <div class="modal-box max-w-md max-h-[88vh] flex flex-col gap-5 scroll-thin">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold m-0">我的设置</h2>
+        <form method="dialog"><button class="btn btn-sm btn-circle btn-ghost" type="submit">✕</button></form>
+      </div>
 
         <section class="flex flex-col gap-2">
           <span class="text-sm font-semibold opacity-70">昵称</span>
@@ -368,18 +367,17 @@
           <input type="text" class="input input-sm w-full" placeholder="stun:host:port（可追加自定义 STUN）" autocomplete="off" spellcheck="false" x-model="stun" x-on:change="saveStun">
           <p class="text-xs opacity-50 m-0">默认使用本站自建 STUN（无第三方）；填写后会额外向该 STUN 暴露 IP。</p>
         </section>
-      </div>
     </div>
-  </div>
+    <form method="dialog" class="modal-backdrop"><button type="submit">关闭</button></form>
+  </dialog>
 
   <!-- 关于弹窗 -->
-  <div x-cloak :class="{ 'hidden': !aboutOpen }" class="fixed inset-0 z-[80] grid place-items-center bg-black/40 p-4" x-on:click.self="aboutOpen = false">
-    <div class="card bg-base-100 text-base-content w-full max-w-md shadow-2xl">
-      <div class="card-body gap-3">
-        <div class="flex items-center justify-between">
-          <h2 class="text-lg font-bold m-0">关于 PPTTER</h2>
-          <button class="btn btn-sm btn-circle btn-ghost" type="button" x-on:click="aboutOpen = false">✕</button>
-        </div>
+  <dialog class="modal" x-ref="aboutDialog">
+    <div class="modal-box max-w-md flex flex-col gap-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold m-0">关于 PPTTER</h2>
+        <form method="dialog"><button class="btn btn-sm btn-circle btn-ghost" type="submit">✕</button></form>
+      </div>
         <p class="text-sm m-0 opacity-80">零信任匿名聊天：服务器只转发不可解密的密文，不落库、不写盘、不记录 IP 或内容。</p>
         <ul class="text-sm opacity-80 list-disc pl-5 m-0 space-y-1">
           <li>端到端加密：X25519 ECDH + HKDF（前向保密）、Ed25519 逐条签名（发送者认证）。</li>
@@ -397,14 +395,18 @@
           <div>本机身份指纹（用于带外核对身份）：</div>
           <code class="block mt-1 break-all" x-text="fingerprint">—</code>
         </div>
-      </div>
     </div>
-  </div>
+    <form method="dialog" class="modal-backdrop"><button type="submit">关闭</button></form>
+  </dialog>
 
   <!-- 图片灯箱 -->
-  <div x-cloak :class="{ 'hidden': !lightboxOpen }" class="fixed inset-0 z-[90] bg-black/85 grid place-items-center p-4 cursor-zoom-out" x-on:click="lightboxOpen = false">
-    <img class="max-w-[92vw] max-h-[92vh] rounded-lg" alt="图片预览" :src="lightboxSrc">
-  </div>
+  <dialog class="modal lightbox" x-ref="lightbox">
+    <form method="dialog" class="modal-box max-w-none w-auto bg-transparent shadow-none p-0 grid place-items-center">
+      <button type="submit" class="cursor-zoom-out" title="关闭">
+        <img class="max-w-[92vw] max-h-[92vh] rounded-lg" alt="图片预览" :src="lightboxSrc">
+      </button>
+    </form>
+  </dialog>
 
   <div x-cloak :class="{ 'hidden': !toastShown }" class="toast toast-top toast-center z-50">
     <div class="alert shadow-lg" x-text="toastText"></div>

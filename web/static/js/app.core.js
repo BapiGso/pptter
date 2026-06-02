@@ -34,7 +34,8 @@
     chime: [{ f: 784, t: "sine", d: 0.16, g: 0.1 }, { f: 988, t: "sine", d: 0.16, g: 0.09, at: 0.12 }, { f: 1175, t: "sine", d: 0.24, g: 0.09, at: 0.24 }],
     blip: [{ f: 300, t: "sawtooth", d: 0.06, g: 0.08 }, { f: 620, t: "sawtooth", d: 0.08, g: 0.08, at: 0.07 }],
   };
-  const THEMES = ["pptter", "pptter-dark", "pptter-grape", "pptter-ocean", "pptter-sunset", "pptter-mid"];
+  const THEMES = ["pptter", "pptter-dark", "cupcake", "synthwave", "retro", "dracula"];
+  const DARK_THEMES = new Set(["pptter-dark", "synthwave", "dracula"]);
 
   // deriveSharedKey 把一次 X25519 ECDH 的共享密钥经 HKDF 派生成一次性 AES-256-GCM 密钥。
   //   - dh：本端会话密钥提供方（WebCrypto 或 nacl 回退），deriveSecret(peerRaw) 返回 32 字节原始共享点；
@@ -353,7 +354,7 @@
   }
 
   function isDarkTheme(theme) {
-    return theme === "pptter-dark" || theme === "pptter-mid";
+    return DARK_THEMES.has(theme);
   }
 
   function stunURL(host, port) {

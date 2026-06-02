@@ -31,10 +31,7 @@
         themeOptions: [],
         inputPlaceholder: "群聊消息，本地加密后发送",
         draft: "",
-        settingsOpen: false,
-        aboutOpen: false,
         menuOpen: false,
-        lightboxOpen: false,
         lightboxSrc: "",
         toastShown: false,
         toastText: "",
@@ -94,8 +91,8 @@
         dropFile: actions.dropFile,
         pasteFile: actions.pasteFile,
         openSettings() {
-          this.settingsOpen = true;
           this.menuOpen = false;
+          this.$refs.settingsDialog.showModal();
         },
         saveSound: actions.saveSound,
         onBgFile: actions.onBgFile,
@@ -106,15 +103,15 @@
         testTone: actions.testTone,
         saveStun: actions.saveStun,
         openAbout() {
-          this.aboutOpen = true;
           this.menuOpen = false;
+          this.$refs.aboutDialog.showModal();
           void actions.fingerprint().then((fingerprint) => { this.fingerprint = fingerprint; });
         },
         toggleTheme: actions.toggleTheme,
         ensureAudio: actions.ensureAudio,
         showImage(src) {
           this.lightboxSrc = src;
-          this.lightboxOpen = true;
+          this.$refs.lightbox.showModal();
         },
         cancelTransfer: actions.cancelTransfer,
         retryTransfer: actions.retryTransfer,

@@ -167,10 +167,10 @@
   const THEME_OPTIONS = [
     { key: "pptter", label: "青绿（亮）" },
     { key: "pptter-dark", label: "青绿（暗）" },
-    { key: "pptter-grape", label: "葡萄紫（亮）" },
-    { key: "pptter-ocean", label: "海蓝（亮）" },
-    { key: "pptter-sunset", label: "暖橙（亮）" },
-    { key: "pptter-mid", label: "午夜蓝（暗）" },
+    { key: "cupcake", label: "纸杯蛋糕（亮）" },
+    { key: "synthwave", label: "合成波（暗）" },
+    { key: "retro", label: "复古（亮）" },
+    { key: "dracula", label: "德古拉（暗）" },
   ].map((t) => ({ key: t.key, label: t.label, swatchClass: "theme-dot theme-dot--" + t.key }));
 
   function boot() {

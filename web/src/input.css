@@ -4,9 +4,9 @@
 @source "../index.html";
 @source "../static/js/app.js";
 
-/* 只启用自定义主题，去掉内置主题以减小体积。 */
+/* 只启用自定义主题 + 少量 daisyUI 自带配色，其余内置主题不打包以控制体积。 */
 @plugin "daisyui" {
-  themes: false;
+  themes: cupcake, synthwave, retro, dracula;
 }
 
 /* pptter 主题：复刻旧版青绿 + 胶囊圆角风格。 */
@@ -75,154 +75,6 @@
   --color-warning-content: #2a1c00;
   --color-error: #f43f5e;
   --color-error-content: #ffffff;
-
-  --radius-selector: 999px;
-  --radius-field: 999px;
-  --radius-box: 1rem;
-  --border: 1px;
-  --depth: 1;
-}
-
-/* pptter-grape：葡萄紫亮色。 */
-@plugin "daisyui/theme" {
-  name: "pptter-grape";
-  default: false;
-  prefersdark: false;
-  color-scheme: light;
-
-  --color-base-100: #ffffff;
-  --color-base-200: #f5f1fb;
-  --color-base-300: #e7ddf5;
-  --color-base-content: #2c2440;
-
-  --color-primary: #7c3aed;
-  --color-primary-content: #ffffff;
-  --color-secondary: #a855f7;
-  --color-secondary-content: #2a0a4a;
-  --color-accent: #d8b4fe;
-  --color-accent-content: #3b0764;
-  --color-neutral: #3b3357;
-  --color-neutral-content: #f5f1fb;
-
-  --color-info: #6366f1;
-  --color-info-content: #ffffff;
-  --color-success: #10b981;
-  --color-success-content: #ffffff;
-  --color-warning: #f59e0b;
-  --color-warning-content: #4a2e00;
-  --color-error: #f43f5e;
-  --color-error-content: #ffffff;
-
-  --radius-selector: 999px;
-  --radius-field: 999px;
-  --radius-box: 1rem;
-  --border: 1px;
-  --depth: 1;
-}
-
-/* pptter-ocean：海蓝亮色。 */
-@plugin "daisyui/theme" {
-  name: "pptter-ocean";
-  default: false;
-  prefersdark: false;
-  color-scheme: light;
-
-  --color-base-100: #ffffff;
-  --color-base-200: #eef5fb;
-  --color-base-300: #d9e8f5;
-  --color-base-content: #14283a;
-
-  --color-primary: #0369a1;
-  --color-primary-content: #ffffff;
-  --color-secondary: #0ea5e9;
-  --color-secondary-content: #012a3f;
-  --color-accent: #7dd3fc;
-  --color-accent-content: #043a52;
-  --color-neutral: #1f3547;
-  --color-neutral-content: #eef5fb;
-
-  --color-info: #0ea5e9;
-  --color-info-content: #ffffff;
-  --color-success: #059669;
-  --color-success-content: #ffffff;
-  --color-warning: #f59e0b;
-  --color-warning-content: #4a2e00;
-  --color-error: #f43f5e;
-  --color-error-content: #ffffff;
-
-  --radius-selector: 999px;
-  --radius-field: 999px;
-  --radius-box: 1rem;
-  --border: 1px;
-  --depth: 1;
-}
-
-/* pptter-sunset：暖橙亮色。 */
-@plugin "daisyui/theme" {
-  name: "pptter-sunset";
-  default: false;
-  prefersdark: false;
-  color-scheme: light;
-
-  --color-base-100: #fffdfb;
-  --color-base-200: #fdf2ec;
-  --color-base-300: #f8dfd2;
-  --color-base-content: #3a2418;
-
-  --color-primary: #ea580c;
-  --color-primary-content: #ffffff;
-  --color-secondary: #f97316;
-  --color-secondary-content: #3a1500;
-  --color-accent: #fdba74;
-  --color-accent-content: #4a2400;
-  --color-neutral: #44322a;
-  --color-neutral-content: #fdf2ec;
-
-  --color-info: #0ea5e9;
-  --color-info-content: #ffffff;
-  --color-success: #16a34a;
-  --color-success-content: #ffffff;
-  --color-warning: #f59e0b;
-  --color-warning-content: #4a2e00;
-  --color-error: #e11d48;
-  --color-error-content: #ffffff;
-
-  --radius-selector: 999px;
-  --radius-field: 999px;
-  --radius-box: 1rem;
-  --border: 1px;
-  --depth: 1;
-}
-
-/* pptter-mid：午夜深蓝深色。 */
-@plugin "daisyui/theme" {
-  name: "pptter-mid";
-  default: false;
-  prefersdark: false;
-  color-scheme: dark;
-
-  --color-base-100: #14181f;
-  --color-base-200: #1b212b;
-  --color-base-300: #252d3a;
-  --color-base-content: #e3e9f2;
-
-  --color-primary: #6366f1;
-  --color-primary-content: #ffffff;
-  --color-secondary: #818cf8;
-  --color-secondary-content: #10132e;
-  --color-accent: #a5b4fc;
-  --color-accent-content: #161a3a;
-  --color-neutral: #c7cddb;
-  --color-neutral-content: #14181f;
-
-  --color-info: #38bdf8;
-  --color-info-content: #04222f;
-  --color-success: #34d399;
-  --color-success-content: #03261a;
-  --color-warning: #fbbf24;
-  --color-warning-content: #2a1c00;
-  --color-error: #fb7185;
-  --color-error-content: #2a0710;
 
   --radius-selector: 999px;
   --radius-field: 999px;
@@ -339,10 +191,16 @@ body {
 
 .theme-dot--pptter { background: linear-gradient(135deg, #ffffff 0 50%, #059f95 50% 100%); }
 .theme-dot--pptter-dark { background: linear-gradient(135deg, #1b2227 0 50%, #06c7ba 50% 100%); }
-.theme-dot--pptter-grape { background: linear-gradient(135deg, #ffffff 0 50%, #7c3aed 50% 100%); }
-.theme-dot--pptter-ocean { background: linear-gradient(135deg, #ffffff 0 50%, #0369a1 50% 100%); }
-.theme-dot--pptter-sunset { background: linear-gradient(135deg, #fffdfb 0 50%, #ea580c 50% 100%); }
-.theme-dot--pptter-mid { background: linear-gradient(135deg, #14181f 0 50%, #6366f1 50% 100%); }
+/* daisyUI 自带主题预览：左上=base-100，右下=primary，取自 themes.css。 */
+.theme-dot--cupcake { background: linear-gradient(135deg, oklch(97.788% .004 56.375) 0 50%, oklch(85% .138 181.071) 50% 100%); }
+.theme-dot--synthwave { background: linear-gradient(135deg, oklch(15% .09 281.288) 0 50%, oklch(71% .202 349.761) 50% 100%); }
+.theme-dot--retro { background: linear-gradient(135deg, oklch(91.637% .034 90.515) 0 50%, oklch(80% .114 19.571) 50% 100%); }
+.theme-dot--dracula { background: linear-gradient(135deg, oklch(28.822% .022 277.508) 0 50%, oklch(75.461% .183 346.812) 50% 100%); }
+
+/* 灯箱：盖过 daisyUI .modal[open] 的默认 40% 遮罩，黑得更彻底以突出图片。 */
+dialog.modal.lightbox[open] {
+  background-color: rgb(0 0 0 / 0.85);
+}
 
 /* 静态头像精灵图：避免用 JS 写入 style=""，兼容严格 CSP。 */
 .avatar-sprite {
@@ -409,9 +267,10 @@ body {
   background: rgb(255 255 255 / 0.12);
 }
 
-/* 深色模式：背景与玻璃面板调暗。 */
+/* 深色模式：背景与玻璃面板调暗（含 daisyUI 自带深色主题）。 */
 [data-theme="pptter-dark"] body,
-[data-theme="pptter-mid"] body {
+[data-theme="synthwave"] body,
+[data-theme="dracula"] body {
   background:
     radial-gradient(circle at 12% 14%, rgb(6 199 186 / 0.16), transparent 24rem),
     radial-gradient(circle at 86% 80%, rgb(13 110 160 / 0.18), transparent 26rem),
@@ -419,12 +278,14 @@ body {
 }
 
 [data-theme="pptter-dark"] .glass-light,
-[data-theme="pptter-mid"] .glass-light {
+[data-theme="synthwave"] .glass-light,
+[data-theme="dracula"] .glass-light {
   background: rgb(20 26 30 / 0.62);
 }
 
 [data-theme="pptter-dark"] .glass-input,
-[data-theme="pptter-mid"] .glass-input {
+[data-theme="synthwave"] .glass-input,
+[data-theme="dracula"] .glass-input {
   background: rgb(255 255 255 / 0.10);
   color: #e6edf0;
 }
