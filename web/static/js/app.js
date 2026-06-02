@@ -97,7 +97,13 @@
     statusText: "初始化",
     statusTone: "warn",
     reconnecting: false,
+    reconnectAttempts: 0,
+    reconnectTimer: 0,
   };
+
+  // 自动重连退避：基数 1s，指数增长封顶 30s，叠加抖动避免同时惊群。
+  const RECONNECT_BASE_MS = 1000;
+  const RECONNECT_MAX_MS = 30 * 1000;
 
   // 单条活动的 WebRTC 直连（仅用于私聊大文件）。
   const P2P_IDLE_KEEPALIVE_MS = 2 * 60 * 1000;
@@ -388,6 +394,7 @@
   }
 
   async function connect() {
+    clearReconnectTimer();
     state.peers = [];
     state.threads = { group: [] };
     state.unread = {};
@@ -405,6 +412,7 @@
     state.socket = socket;
 
     socket.addEventListener("open", () => {
+      state.reconnectAttempts = 0;
       socket.send(JSON.stringify({ type: "hello", idKey: state.idKeyB64, dhKey: state.dhKeyB64, dhSig: state.dhSigB64 }));
     });
     socket.addEventListener("message", (event) => {
@@ -412,8 +420,8 @@
     });
     socket.addEventListener("close", () => {
       if (state.socket === socket) {
-        setStatus("已断开", "bad");
-        addSystemMessage("连接已断开，聊天记录已保留，可点左下角重新连接。");
+        addSystemMessage("连接已断开，正在自动重连…（也可点左下角手动重连）");
+        scheduleReconnect();
       }
     });
     socket.addEventListener("error", () => {
@@ -434,6 +442,31 @@
     } finally {
       state.reconnecting = false;
     }
+  }
+
+  // clearReconnectTimer 取消任何待触发的自动重连，避免与手动重连/切房并发。
+  function clearReconnectTimer() {
+    if (state.reconnectTimer) {
+      window.clearTimeout(state.reconnectTimer);
+      state.reconnectTimer = 0;
+    }
+  }
+
+  // scheduleReconnect 在连接意外断开后，按指数退避（叠加抖动）安排一次自动重连。
+  // 成功 open 后 reconnectAttempts 归零；手动重连走 connect()，不受此处节流影响。
+  function scheduleReconnect() {
+    if (state.reconnecting || state.reconnectTimer) {
+      return;
+    }
+    const attempt = state.reconnectAttempts || 0;
+    const backoff = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** attempt);
+    const delay = backoff + Math.floor(Math.random() * 300);
+    state.reconnectAttempts = attempt + 1;
+    setStatus("连接中断，重连中…", "warn");
+    state.reconnectTimer = window.setTimeout(() => {
+      state.reconnectTimer = 0;
+      void reconnect();
+    }, delay);
   }
 
   // createRoom 新建一个随机私密房间：SPA 内原地切换，不整页刷新、不开新标签。

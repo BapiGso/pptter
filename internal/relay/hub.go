@@ -26,6 +26,7 @@ const (
 	defaultMaxFanoutPerEnvelope = 8
 	defaultHandshakeTimeout     = 10 * time.Second
 	defaultWriteTimeout         = 5 * time.Second
+	defaultPingInterval         = 30 * time.Second
 	defaultRateLimitPerSecond   = 10
 	defaultRateLimitBurst       = 20
 	defaultMaxRooms             = 128
@@ -60,6 +61,9 @@ type Config struct {
 	MaxFanoutPerEnvelope int
 	HandshakeTimeout     time.Duration
 	WriteTimeout         time.Duration
+	// PingInterval 是服务端向每个连接发送 WebSocket ping 的间隔；用于穿透空闲反代/NAT
+	// 的静默超时，并借 ping 的 pong 超时检测已死连接。<=0 时取默认值。
+	PingInterval time.Duration
 	GlobalJoinRate       int
 	GlobalJoinBurst      int
 	GlobalMessageRate    int
@@ -261,6 +265,12 @@ func (h *Hub) HandleWebSocket(c *echo.Context) error {
 
 	h.broadcastPeerJoined(client)
 
+	// 心跳：单独协程周期性 ping。coder/websocket 的 pong 由下面的 Read 循环自动读取，
+	// 故 ping 与 Read 并发安全。ping 失败（pong 超时或连接已坏）即关闭，Read 随之返回并触发 leave。
+	pingCtx, stopPing := context.WithCancel(requestCtx)
+	defer stopPing()
+	go h.pingLoop(pingCtx, conn)
+
 	rateLimiter := newMessageRateLimiter(time.Now())
 	for {
 		msgType, data, err := conn.Read(requestCtx)
@@ -293,6 +303,37 @@ func (h *Hub) HandleWebSocket(c *echo.Context) error {
 		if err != nil {
 			_ = conn.Close(websocket.StatusPolicyViolation, "invalid envelope")
 			return nil
+		}
+	}
+}
+
+// pingLoop 周期性向连接发送 WebSocket ping。任一 ping 失败即主动关闭连接，
+// 让读循环退出并触发 leave 清理。ctx 取消（HandleWebSocket 返回）时退出。
+func (h *Hub) pingLoop(ctx context.Context, conn *websocket.Conn) {
+	interval := h.cfg.PingInterval
+	if interval <= 0 {
+		interval = defaultPingInterval
+	}
+	timeout := h.cfg.WriteTimeout
+	if timeout <= 0 {
+		timeout = defaultWriteTimeout
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			pingCtx, cancel := context.WithTimeout(ctx, timeout)
+			err := conn.Ping(pingCtx)
+			cancel()
+			if err != nil {
+				_ = conn.Close(websocket.StatusPolicyViolation, "ping timeout")
+				return
+			}
 		}
 	}
 }
@@ -479,6 +520,9 @@ func normalizeConfig(cfg Config) Config {
 	}
 	if cfg.WriteTimeout <= 0 {
 		cfg.WriteTimeout = defaultWriteTimeout
+	}
+	if cfg.PingInterval <= 0 {
+		cfg.PingInterval = defaultPingInterval
 	}
 	if cfg.GlobalJoinRate <= 0 {
 		cfg.GlobalJoinRate = defaultGlobalJoinRate
