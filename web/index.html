@@ -107,7 +107,8 @@
             <div class="min-w-0 cursor-pointer rounded-md -mx-1 px-1 hover:bg-base-300/40" role="button" tabindex="0" title="会话信息与身份核对" x-on:click="openMembers" x-on:keydown.enter="openMembers">
               <h1 class="text-base font-semibold truncate m-0" x-text="convoTitle">群聊</h1>
               <p class="text-xs m-0 flex items-center gap-1.5">
-                <span class="inline-grid place-items-center min-w-4 h-4 px-1 rounded-full text-[0.62rem] font-bold leading-none text-white" :class="statusDotClass" x-text="onlineCount">1</span>
+                <span x-show="!isGroupConvo" class="inline-block size-2 rounded-full" :class="statusDotClass"></span>
+                <span x-show="isGroupConvo" class="inline-grid place-items-center min-w-4 h-4 px-1 rounded-full text-[0.62rem] font-bold leading-none text-white" :class="statusDotClass" x-text="onlineCount">1</span>
                 <span class="text-base-content/60" x-text="statusText">初始化</span>
               </p>
             </div>

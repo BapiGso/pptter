@@ -1167,6 +1167,7 @@
     const connected = inDM && rtcConnected(state.active);
     const connecting = inDM && rtc.connecting && rtc.peerId === state.active;
     ui.active = state.active;
+    ui.isGroupConvo = !inDM;
     ui.convoTitle = conversationTitle();
     ui.statusText = statusDisplayText();
     ui.statusDotClass = connecting ? "bg-warning" : state.statusTone === "ok" ? "bg-success" : state.statusTone === "bad" ? "bg-error" : "bg-warning";

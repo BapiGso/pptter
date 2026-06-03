@@ -41,6 +41,7 @@
         stun: "",
         members: [],
         onlineCount: "1",
+        isGroupConvo: true,
         selfAvatarText: "我",
         selfAvatarClass: "avatar-sprite avatar-pos-0",
         isDark: false,
