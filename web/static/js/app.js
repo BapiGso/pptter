@@ -571,6 +571,10 @@
       rtcReset();
     }
     if (state.active === peerID) {
+      // 正在私聊的对方离开：关掉「会话信息」面板，避免它把上下文切到群聊后显示全员。
+      if (ui && ui.$refs && ui.$refs.membersDialog && ui.$refs.membersDialog.open) {
+        ui.$refs.membersDialog.close();
+      }
       state.active = GROUP;
       syncHeaderUI();
       renderMessages();
@@ -1514,7 +1518,8 @@
     }
   }
 
-  // roster 汇总当前在场成员（含自己）及各自身份指纹，供「会话信息」面板带外核对。
+  // roster 汇总当前会话参与者及各自身份指纹，供「会话信息」面板带外核对。
+  // 群聊列出自己 + 全部在场成员；私聊只列自己 + 当前对方两人。
   async function roster() {
     const list = [];
     const selfID = state.self ? state.self.id : "";
@@ -1526,7 +1531,8 @@
       isSelf: true,
       fingerprint: await fingerprintOf(state.idKeyB64),
     });
-    for (const peer of state.peers) {
+    const peers = state.active === GROUP ? state.peers : state.peers.filter((p) => p.id === state.active);
+    for (const peer of peers) {
       list.push({
         id: peer.id,
         name: peerName(peer.id),
