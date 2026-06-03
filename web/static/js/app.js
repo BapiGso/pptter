@@ -553,7 +553,6 @@
       await addPeer(peer, false);
     }
     setStatus("已连接", "ok");
-    addSystemMessage("已进入" + groupTitle() + "，当前 " + memberCountText() + " 人在线。");
     if (state.nick && state.peers.length > 0) {
       void sendContent({ k: "p" }, { broadcast: true, silent: true });
     }
