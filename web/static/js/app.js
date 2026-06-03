@@ -163,16 +163,6 @@
   // 会话列表里「返回公共群聊」入口的特殊 key（单连接架构下，切房间即重连）。
   const LOBBY_KEY = "__lobby__";
 
-  // 主题色卡：key 对应 input.css 里的主题名，swatchClass 对应 .theme-dot--* 预览样式。
-  const THEME_OPTIONS = [
-    { key: "pptter", label: "青绿（亮）" },
-    { key: "pptter-dark", label: "青绿（暗）" },
-    { key: "cupcake", label: "纸杯蛋糕（亮）" },
-    { key: "synthwave", label: "合成波（暗）" },
-    { key: "retro", label: "复古（亮）" },
-    { key: "dracula", label: "德古拉（暗）" },
-  ].map((t) => ({ key: t.key, label: t.label, swatchClass: "theme-dot theme-dot--" + t.key }));
-
   function boot() {
     if (booted) {
       return;
@@ -251,7 +241,6 @@
       },
       resetBackground: () => applyBackground(null),
       saveNick: () => setNick(ui ? ui.nick : ""),
-      applyTheme: (theme) => applyTheme(theme),
       saveTone: () => {
         state.tone = (ui && TONES[ui.tone]) ? ui.tone : "soft";
         saveSetting("tone", state.tone);
@@ -1168,7 +1157,6 @@
     ui.stun = state.stun;
     ui.theme = document.documentElement.dataset.theme || "pptter";
     ui.isDark = isDarkTheme(ui.theme);
-    ui.themeOptions = themeOptionViews();
     ui.backgroundImage = state.backgroundImage;
   }
 
@@ -1340,6 +1328,8 @@
       ui.conversations = conversationViews();
       ui.hasPeers = state.peers.length > 0;
       ui.active = state.active;
+      ui.onlineCount = memberCountText();
+      refreshRoster();
     }
   }
 
@@ -1480,22 +1470,12 @@
     showToast(name ? "昵称已更新" : "已清除昵称");
   }
 
-  function themeOptionViews() {
-    const current = document.documentElement.dataset.theme || "pptter";
-    return THEME_OPTIONS.map((t) => ({
-      key: t.key,
-      label: t.label,
-      dotClass: t.swatchClass + (t.key === current ? " ring-2 ring-primary ring-offset-2 ring-offset-base-100" : ""),
-    }));
-  }
-
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
     saveSetting("theme", theme);
     if (ui) {
       ui.theme = theme;
       ui.isDark = isDarkTheme(theme);
-      ui.themeOptions = themeOptionViews();
     }
   }
 
@@ -1557,6 +1537,13 @@
       });
     }
     return list;
+  }
+
+  // refreshRoster 仅在「会话信息」面板打开时重算成员指纹列表，使其随成员进出实时更新。
+  function refreshRoster() {
+    if (ui && ui.$refs && ui.$refs.membersDialog && ui.$refs.membersDialog.open) {
+      void roster().then((list) => { if (ui) { ui.members = list; } });
+    }
   }
 
   // ---- WebRTC P2P：仅当前私聊，用于大文件直传与消息直连，信令走既有端到端加密通道。 ----

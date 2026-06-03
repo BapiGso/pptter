@@ -107,7 +107,7 @@
             <div class="min-w-0 cursor-pointer rounded-md -mx-1 px-1 hover:bg-base-300/40" role="button" tabindex="0" title="会话信息与身份核对" x-on:click="openMembers" x-on:keydown.enter="openMembers">
               <h1 class="text-base font-semibold truncate m-0" x-text="convoTitle">群聊</h1>
               <p class="text-xs m-0 flex items-center gap-1.5">
-                <span class="inline-block size-2 rounded-full" :class="statusDotClass"></span>
+                <span class="inline-grid place-items-center min-w-4 h-4 px-1 rounded-full text-[0.62rem] font-bold leading-none text-white" :class="statusDotClass" x-text="onlineCount">1</span>
                 <span class="text-base-content/60" x-text="statusText">初始化</span>
               </p>
             </div>
@@ -323,18 +323,6 @@
             <button class="btn btn-sm btn-primary" type="button" x-on:click="saveNick">保存</button>
           </div>
           <p class="text-xs opacity-50 m-0">昵称会随消息端到端加密发给联系人；留空则显示匿名 ID。</p>
-        </section>
-
-        <section class="flex flex-col gap-2">
-          <span class="text-sm font-semibold opacity-70">主题配色</span>
-          <div class="flex flex-wrap gap-3">
-            <template x-for="t in themeOptions" :key="t.key">
-              <button type="button" class="flex flex-col items-center gap-1 cursor-pointer" :title="t.label" x-on:click="applyTheme(t.key)">
-                <span :class="t.dotClass"></span>
-                <span class="text-[0.7rem] opacity-70" x-text="t.label"></span>
-              </button>
-            </template>
-          </div>
         </section>
 
         <section class="flex flex-col gap-3">

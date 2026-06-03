@@ -180,23 +180,6 @@ body {
   color: var(--color-error);
 }
 
-/* 主题色卡：左上=底色，右下=主色，对角分割，直观预览每套主题。 */
-.theme-dot {
-  display: block;
-  width: 2.1rem;
-  height: 2.1rem;
-  border-radius: 999px;
-  border: 1px solid rgb(0 0 0 / 0.12);
-}
-
-.theme-dot--pptter { background: linear-gradient(135deg, #ffffff 0 50%, #059f95 50% 100%); }
-.theme-dot--pptter-dark { background: linear-gradient(135deg, #1b2227 0 50%, #06c7ba 50% 100%); }
-/* daisyUI 自带主题预览：左上=base-100，右下=primary，取自 themes.css。 */
-.theme-dot--cupcake { background: linear-gradient(135deg, oklch(97.788% .004 56.375) 0 50%, oklch(85% .138 181.071) 50% 100%); }
-.theme-dot--synthwave { background: linear-gradient(135deg, oklch(15% .09 281.288) 0 50%, oklch(71% .202 349.761) 50% 100%); }
-.theme-dot--retro { background: linear-gradient(135deg, oklch(91.637% .034 90.515) 0 50%, oklch(80% .114 19.571) 50% 100%); }
-.theme-dot--dracula { background: linear-gradient(135deg, oklch(28.822% .022 277.508) 0 50%, oklch(75.461% .183 346.812) 50% 100%); }
-
 /* 灯箱：盖过 daisyUI .modal[open] 的默认 40% 遮罩，黑得更彻底以突出图片。 */
 dialog.modal.lightbox[open] {
   background-color: rgb(0 0 0 / 0.85);
@@ -252,7 +235,11 @@ dialog.modal.lightbox[open] {
 .avatar-pos-34 { --avatar-x: 80%; --avatar-y: 100%; }
 .avatar-pos-35 { --avatar-x: 100%; --avatar-y: 100%; }
 
-/* 细滚动条，沿用旧版观感。 */
+/* 细滚动条，沿用旧版观感；预留滚动条槽位，避免内容溢出时滚动条出现导致布局抖动。 */
+.scroll-thin {
+  scrollbar-gutter: stable;
+}
+
 .scroll-thin::-webkit-scrollbar {
   width: 6px;
   height: 6px;
