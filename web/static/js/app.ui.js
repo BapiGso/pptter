@@ -40,7 +40,7 @@
         soundOn: true,
         tone: "soft",
         stun: "",
-        fingerprint: "—",
+        members: [],
         selfAvatarText: "我",
         selfAvatarClass: "avatar-sprite avatar-pos-0",
         isDark: false,
@@ -102,10 +102,16 @@
         saveTone: actions.saveTone,
         testTone: actions.testTone,
         saveStun: actions.saveStun,
+        openMembers() {
+          this.menuOpen = false;
+          void actions.roster().then((list) => {
+            this.members = list;
+            this.$refs.membersDialog.showModal();
+          });
+        },
         openAbout() {
           this.menuOpen = false;
           this.$refs.aboutDialog.showModal();
-          void actions.fingerprint().then((fingerprint) => { this.fingerprint = fingerprint; });
         },
         toggleTheme: actions.toggleTheme,
         ensureAudio: actions.ensureAudio,

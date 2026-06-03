@@ -282,7 +282,7 @@
           removeSetting("stun");
         }
       },
-      fingerprint: () => fingerprint(),
+      roster: () => roster(),
       toggleTheme: (event) => toggleTheme(event),
       ensureAudio: () => ensureAudio(),
       cancelTransfer: (messageId) => cancelTransfer(messageId),
@@ -579,7 +579,6 @@
 
   function handlePeerLeft(peerID) {
     state.peers = state.peers.filter((p) => p.id !== peerID);
-    addSystemMessage("成员 " + shortID(peerID) + " 已离开。");
     if (rtc.peerId === peerID) {
       rtcReset();
     }
@@ -698,12 +697,11 @@
         addSystemMessage("成员 " + shortID(peer.id) + " 的会话公钥签名异常，已拒绝（疑似中间人）。");
         return;
       }
-      state.peers.push({ id: peer.id, idVerifier, dhRaw, lastCounter: 0, name: "" });
+      state.peers.push({ id: peer.id, idVerifier, dhRaw, lastCounter: 0, name: "", idKeyB64: peer.idKey });
       if (!state.threads[peer.id]) {
         state.threads[peer.id] = [];
       }
       if (announce) {
-        addSystemMessage("成员 " + shortID(peer.id) + " 加入了群聊。");
         if (state.nick) {
           void sendContent({ k: "p" }, { toPeerId: peer.id, scope: "group", silent: true });
         }
@@ -1522,18 +1520,43 @@
     });
   }
 
-  // fingerprint 返回本机身份公钥的短指纹，供成员带外核对、防中间人。
-  async function fingerprint() {
-    if (!state.idKeyB64 || !window.crypto || !window.crypto.subtle) {
+  // fingerprintOf 把身份公钥（base64）哈希成短指纹，供成员带外核对、防中间人。
+  async function fingerprintOf(idKeyB64) {
+    if (!idKeyB64 || !window.crypto || !window.crypto.subtle) {
       return "—";
     }
     try {
-      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", base64ToBytes(state.idKeyB64)));
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", base64ToBytes(idKeyB64)));
       const hex = Array.from(digest.slice(0, 16)).map((b) => b.toString(16).padStart(2, "0")).join("");
       return hex.replace(/(.{4})/g, "$1 ").trim();
     } catch {
       return "—";
     }
+  }
+
+  // roster 汇总当前在场成员（含自己）及各自身份指纹，供「会话信息」面板带外核对。
+  async function roster() {
+    const list = [];
+    const selfID = state.self ? state.self.id : "";
+    list.push({
+      id: selfID || "self",
+      name: selfName(),
+      idShort: selfID ? shortID(selfID) : "—",
+      avatarClass: avatarModel(selfID, "").avatarClass,
+      isSelf: true,
+      fingerprint: await fingerprintOf(state.idKeyB64),
+    });
+    for (const peer of state.peers) {
+      list.push({
+        id: peer.id,
+        name: peerName(peer.id),
+        idShort: shortID(peer.id),
+        avatarClass: avatarModel(peer.id, "").avatarClass,
+        isSelf: false,
+        fingerprint: await fingerprintOf(peer.idKeyB64),
+      });
+    }
+    return list;
   }
 
   // ---- WebRTC P2P：仅当前私聊，用于大文件直传与消息直连，信令走既有端到端加密通道。 ----

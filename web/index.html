@@ -104,7 +104,7 @@
                 <path d="M4 6h16M4 12h16M4 18h16"></path>
               </svg>
             </button>
-            <div class="min-w-0">
+            <div class="min-w-0 cursor-pointer rounded-md -mx-1 px-1 hover:bg-base-300/40" role="button" tabindex="0" title="会话信息与身份核对" x-on:click="openMembers" x-on:keydown.enter="openMembers">
               <h1 class="text-base font-semibold truncate m-0" x-text="convoTitle">群聊</h1>
               <p class="text-xs m-0 flex items-center gap-1.5">
                 <span class="inline-block size-2 rounded-full" :class="statusDotClass"></span>
@@ -391,10 +391,34 @@
           </svg>
           <span>安全提示：端到端加密保护的是「传输中」与「服务器」，但<b>你的浏览器、操作系统和输入法</b>能在加密前看到明文。请使用可信浏览器、无痕窗口、不装可疑扩展，并尽量用<b>离线输入法</b>（关闭云联想），避免击键被上传。</span>
         </div>
-        <div class="text-xs opacity-60">
-          <div>本机身份指纹（用于带外核对身份）：</div>
-          <code class="block mt-1 break-all" x-text="fingerprint">—</code>
-        </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button type="submit">关闭</button></form>
+  </dialog>
+
+  <!-- 会话信息 / 身份核对弹窗 -->
+  <dialog class="modal" x-ref="membersDialog">
+    <div class="modal-box max-w-md flex flex-col gap-3 max-h-[88vh]">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold m-0">会话信息</h2>
+        <form method="dialog"><button class="btn btn-sm btn-circle btn-ghost" type="submit">✕</button></form>
+      </div>
+        <p class="text-xs opacity-60 m-0">带外核对身份指纹可防中间人：各自向对方念出自己下方的指纹，逐位比对一致即可信。身份每次重连都会更换，故核对仅对本次会话有效。</p>
+        <ul class="flex flex-col gap-2 overflow-y-auto scroll-thin m-0 p-0 list-none">
+          <template x-for="m in members" :key="m.id">
+            <li class="flex items-start gap-3 rounded-box bg-base-200/40 p-2.5">
+              <span class="size-9 grid shrink-0 place-items-center rounded-full text-xs font-extrabold uppercase text-white select-none" :class="m.avatarClass"></span>
+              <span class="min-w-0 flex-1">
+                <span class="flex items-center gap-1.5">
+                  <strong class="text-sm truncate" x-text="m.name"></strong>
+                  <span :class="{ 'hidden': !m.isSelf }" class="badge badge-ghost badge-xs">我</span>
+                </span>
+                <small class="block text-xs opacity-50" x-text="m.idShort"></small>
+                <code class="block mt-1 text-xs break-all opacity-80" x-text="m.fingerprint"></code>
+              </span>
+            </li>
+          </template>
+        </ul>
+        <p :class="{ 'hidden': members.length > 1 }" class="text-xs opacity-50 m-0">还没有其他成员在线。</p>
     </div>
     <form method="dialog" class="modal-backdrop"><button type="submit">关闭</button></form>
   </dialog>
